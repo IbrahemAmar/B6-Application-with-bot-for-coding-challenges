@@ -1,5 +1,5 @@
 // שם קובץ ה-JSON
-const file = "/tirgul 03/src/db.json";
+const file = "src/db.json";
 
 // כאן יישמרו המשתמשים מהקובץ
 let users = [];

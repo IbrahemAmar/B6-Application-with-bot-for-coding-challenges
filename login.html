@@ -1,62 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
+<head> 
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="min-h-screen bg-gray-100 flex items-center justify-center">
-    <div class="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-      <h1 class="text-2xl font-semibold text-gray-800 text-center mb-6">
-        Sign in to your account
-      </h1>
-
-      <form action="#" method="post" class="space-y-5">
-        <!-- Email -->
-        <div>
-          <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
-            Email
-          </label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            required
-            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="you@example.com"
-          />
-        </div>
-
-        <!-- Password -->
-        <div>
-          <label for="password" class="block text-sm font-medium text-gray-700 mb-1">
-            Password
-          </label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            required
-            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="••••••••"
-          />
-        </div>
-        
-        <!-- Button -->
-        <button
-          type="submit"
-          class="w-full rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 text-sm transition"
-        >
-          Sign in
-        </button>
-      </form>
-
-      <!-- Small footer text -->
-      <p class="mt-6 text-center text-sm text-gray-600">
-        Don’t have an account?
-        <a href="#" class="text-blue-600 hover:underline">Sign up</a>
-      </p>
+    <link href= "https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet" >
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="content"> 
+    <div class="container">
+        <h1>Login</h1>
+        <form onsubmit="login(event)">
+            <label for="userInput">Username or Email</label>
+            <input type="text" id="userInput" required />
+            <label for="passInput">Password</label>
+            <input type="password" id="passInput" required />
+            <button type="submit" class="w-full p-3 bg-blue-500 text-white rounded hover:bg-blue-600">Login</button>
+            <a href="register.html" class="block text-center w-full p-3 mt-4 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">Register</a>
+            <a href="#" class="block text-right mt-4 text-blue-500 hover:underline">Forgot Password?</a>
+        </form>
     </div>
-  </body>
+    <script src="src/users.js"></script>
+    <script src="js/login.js"></script>
+</body>
 </html>
