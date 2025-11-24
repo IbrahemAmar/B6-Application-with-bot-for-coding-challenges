@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CodeBotArena – Login / Register</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css"
+    rel="stylesheet"
+  />
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+  <!-- Navbar -->
+  <header class="bg-white shadow">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <span class="text-xl font-bold text-blue-600">CodeBotArena</span>
+        <span class="text-gray-500 text-sm hidden sm:inline">
+          – AI Bot for Coding Challenges
+        </span>
+      </div>
+
+      <nav class="flex space-x-4 text-sm">
+        <a href="dashboard.html" class="text-gray-600 hover:text-blue-600">Dashboard</a>
+        <a href="daily-challenge.html" class="text-gray-600 hover:text-blue-600">Daily Challenge</a>
+        <a href="history.html" class="text-gray-600 hover:text-blue-600">History & Achievements</a>
+        <a href="auth.html" class="text-blue-600 font-semibold">Login / Register</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-6xl mx-auto w-full px-4 py-6">
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Login -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <h2 class="text-xl font-semibold mb-4">Login</h2>
+        <form class="space-y-3">
+          <input
+            type="email"
+            class="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Email"
+          />
+          <input
+            type="password"
+            class="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Password"
+          />
+          <button
+            type="button"
+            class="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition"
+          >
+            Login (fake)
+          </button>
+        </form>
+        <p class="mt-3 text-xs text-gray-500">
+          Layout only – real project will use backend / API.
+        </p>
+      </div>
+
+      <!-- Register -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <h2 class="text-xl font-semibold mb-4">Register</h2>
+        <form class="space-y-3">
+          <input
+            type="text"
+            class="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Full name"
+          />
+          <input
+            type="email"
+            class="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Email"
+          />
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <select class="border rounded-lg px-3 py-2 text-sm">
+              <option>Beginner</option>
+              <option>Intermediate</option>
+              <option>Advanced</option>
+            </select>
+            <select class="border rounded-lg px-3 py-2 text-sm">
+              <option>Frontend</option>
+              <option>Backend</option>
+              <option>Algorithms</option>
+            </select>
+          </div>
+          <input
+            type="password"
+            class="w-full border rounded-lg px-3 py-2 text-sm"
+            placeholder="Password"
+          />
+          <button
+            type="button"
+            class="w-full bg-green-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-green-700 transition"
+          >
+            Create account (fake)
+          </button>
+        </form>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

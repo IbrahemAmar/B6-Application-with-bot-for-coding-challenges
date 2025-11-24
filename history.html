@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CodeBotArena – History & Achievements</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css"
+    rel="stylesheet"
+  />
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+  <!-- Navbar -->
+  <header class="bg-white shadow">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <span class="text-xl font-bold text-blue-600">CodeBotArena</span>
+        <span class="text-gray-500 text-sm hidden sm:inline">
+          – AI Bot for Coding Challenges
+        </span>
+      </div>
+
+      <nav class="flex space-x-4 text-sm">
+        <a href="dashboard.html" class="text-gray-600 hover:text-blue-600">Dashboard</a>
+        <a href="daily-challenge.html" class="text-gray-600 hover:text-blue-600">Daily Challenge</a>
+        <a href="history.html" class="text-blue-600 font-semibold">History & Achievements</a>
+        <a href="auth.html" class="text-gray-600 hover:text-blue-600">Login / Register</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-6xl mx-auto w-full px-4 py-6 space-y-4">
+    <!-- History -->
+    <div class="bg-white rounded-2xl shadow p-6">
+      <h2 class="text-xl font-semibold mb-4">Solved Challenges History</h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 border-b">
+            <tr>
+              <th class="px-3 py-2 text-left font-medium text-gray-600">Title</th>
+              <th class="px-3 py-2 text-left font-medium text-gray-600">Difficulty</th>
+              <th class="px-3 py-2 text-left font-medium text-gray-600">Score</th>
+              <th class="px-3 py-2 text-left font-medium text-gray-600">Time (min)</th>
+              <th class="px-3 py-2 text-left font-medium text-gray-600">Date</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody" class="divide-y">
+            <!-- Filled by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Achievements -->
+    <div class="bg-white rounded-2xl shadow p-6">
+      <h2 class="text-xl font-semibold mb-4">Achievements</h2>
+      <div id="achievements-list" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+  </main>
+
+  <!-- JS files -->
+  <script src="js/data.js"></script>
+  <script src="js/history.js"></script>
+</body>
+</html>

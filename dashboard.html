@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CodeBotArena – Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css"
+    rel="stylesheet"
+  />
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+  <!-- Navbar -->
+  <header class="bg-white shadow">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <span class="text-xl font-bold text-blue-600">CodeBotArena</span>
+        <span class="text-gray-500 text-sm hidden sm:inline">
+          – AI Bot for Coding Challenges
+        </span>
+      </div>
+
+      <nav class="flex space-x-4 text-sm">
+        <a href="dashboard.html" class="text-blue-600 font-semibold">Dashboard</a>
+        <a href="daily-challenge.html" class="text-gray-600 hover:text-blue-600">Daily Challenge</a>
+        <a href="history.html" class="text-gray-600 hover:text-blue-600">History & Achievements</a>
+        <a href="auth.html" class="text-gray-600 hover:text-blue-600">Login / Register</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-6xl mx-auto w-full px-4 py-6 space-y-6">
+
+    <!-- User summary -->
+    <div class="bg-white rounded-2xl shadow p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold mb-1">
+          Hello, <span id="user-name" class="text-blue-600"></span>
+        </h1>
+        <p class="text-gray-600 text-sm">
+          Track: <span id="user-track" class="font-medium"></span> · Level:
+          <span id="user-level" class="font-medium"></span>
+        </p>
+      </div>
+      <div class="mt-4 sm:mt-0 flex space-x-4">
+        <div class="text-center">
+          <p class="text-xs text-gray-500 mb-1">Solved</p>
+          <p id="stat-solved" class="text-xl font-bold text-green-600">0</p>
+        </div>
+        <div class="text-center">
+          <p class="text-xs text-gray-500 mb-1">Current Streak</p>
+          <p id="stat-streak" class="text-xl font-bold text-orange-500">0</p>
+        </div>
+        <div class="text-center">
+          <p class="text-xs text-gray-500 mb-1">Rating</p>
+          <p id="stat-rating" class="text-xl font-bold text-purple-600">0</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white rounded-2xl shadow p-4">
+        <p class="text-xs text-gray-500 mb-1">Today’s Challenge</p>
+        <p id="dash-challenge-title" class="font-semibold text-gray-800 mb-1"></p>
+        <p id="dash-challenge-diff" class="text-xs inline-flex px-2 py-0.5 rounded-full"></p>
+        <p class="mt-2 text-xs text-gray-500">
+          Go to “Daily Challenge” to solve it with the bot.
+        </p>
+      </div>
+      <div class="bg-white rounded-2xl shadow p-4">
+        <p class="text-xs text-gray-500 mb-1">Last Bot Feedback</p>
+        <p id="dash-last-feedback" class="text-sm text-gray-700">
+          No feedback yet.
+        </p>
+      </div>
+      <div class="bg-white rounded-2xl shadow p-4">
+        <p class="text-xs text-gray-500 mb-1">Upcoming Group Challenge</p>
+        <p class="text-sm font-semibold text-gray-800">
+          “Array Battle – Live Session”
+        </p>
+        <p class="text-xs text-gray-500 mt-1">
+          Real-time challenge in class (competition mode).
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- JS files -->
+  <script src="js/data.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
