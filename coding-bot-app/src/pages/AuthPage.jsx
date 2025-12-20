@@ -1,25 +1,22 @@
 import React, { useState } from 'react';
 
 const AuthPage = ({ onLogin }) => {
-  // 1. State for the dropdown (Beginner/Intermediate/Advanced)
-  const [selectedLevel, setSelectedLevel] = useState('Beginner');
+  // We only need state for Preference now (Level is always Beginner)
+  const [selectedPreference, setSelectedPreference] = useState('Algorithms');
   
-  // 2. State for all text inputs (Login & Register)
   const [formData, setFormData] = useState({
     username: '',
     email: '',
     password: ''
   });
 
-  // Helper to update state when you type in any field
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // --- LOGIN LOGIC (Talks to Backend) ---
+  // --- LOGIN LOGIC ---
   const handleLoginSubmit = async () => {
     try {
-      // Send email/pass to your server
       const response = await fetch('http://localhost:5000/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -32,7 +29,6 @@ const AuthPage = ({ onLogin }) => {
       const data = await response.json();
 
       if (response.ok) {
-        // Success! Pass the REAL user data (level, xp) to App.jsx
         onLogin(data.user); 
       } else {
         alert("❌ Login Failed: " + data.message);
@@ -43,7 +39,7 @@ const AuthPage = ({ onLogin }) => {
     }
   };
 
-  // --- REGISTER LOGIC (Talks to Backend) ---
+  // --- REGISTER LOGIC ---
   const handleRegister = async () => {
     try {
       const response = await fetch('http://localhost:5000/api/register', {
@@ -53,7 +49,8 @@ const AuthPage = ({ onLogin }) => {
           username: formData.username,
           email: formData.email,
           password: formData.password,
-          level: selectedLevel // Send the selected level too!
+          level: 'Beginner', // <--- AUTOMATICALLY SET TO BEGINNER
+          preference: selectedPreference 
         }),
       });
 
@@ -61,8 +58,14 @@ const AuthPage = ({ onLogin }) => {
 
       if (response.ok) {
         alert("🎉 Registration Successful! Logging you in...");
-        // Auto-login after register, assuming fresh start
-        onLogin({ level: selectedLevel, xp: 0 }); 
+        // Auto-login with default Beginner stats
+        onLogin({ 
+            username: formData.username,
+            email: formData.email,
+            level: 'Beginner', 
+            xp: 0, 
+            preference: selectedPreference 
+        }); 
       } else {
         alert("❌ Registration Failed: " + data.message);
       }
@@ -122,19 +125,17 @@ const AuthPage = ({ onLogin }) => {
             className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50" 
           />
           
-          <div className="grid grid-cols-2 gap-4">
+          {/* JUST ONE DROPDOWN NOW: PREFERENCE */}
+          <div className="w-full">
+            <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">Learning Path</label>
             <select 
-              value={selectedLevel}
-              onChange={(e) => setSelectedLevel(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-white"
+                value={selectedPreference}
+                onChange={(e) => setSelectedPreference(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-white"
             >
-              <option value="Beginner">Beginner</option>
-              <option value="Intermediate">Intermediate</option>
-              <option value="Advanced">Advanced</option>
-            </select>
-            <select className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-white">
-              <option>Frontend</option>
-              <option>Backend</option>
+                <option value="Algorithms">Algorithms</option>
+                <option value="Frontend">Frontend</option>
+                <option value="Backend">Backend</option>
             </select>
           </div>
 

@@ -1,38 +1,85 @@
 export const problemDatabase = {
-  Beginner: {
-    title: "Sum of Two Numbers",
-    description: "Write a function that takes two numbers and returns their sum.",
-    example: "Input: a = 5, b = 3 -> Output: 8",
-    hints: [
-      "You just need to use the plus (+) operator.",
-      "Return the result of a + b.",
-      "Check if inputs are numbers first."
-    ],
-    starterCode: "function sum(a, b) {\n  // Write your code here\n  \n}",
-    testCase: (code) => code.includes("return a + b") || code.includes("return a+b")
+  // --- ALGORITHMS TRACK ---
+  Algorithms: {
+    Beginner: {
+      title: "Sum of Two Numbers",
+      description: "Write a function that takes two numbers and returns their sum.",
+      example: "Input: a = 5, b = 3 -> Output: 8",
+      hints: ["Use the + operator", "Return the result"],
+      starterCode: "function sum(a, b) {\n  return a + b;\n}",
+      testCase: (code) => code.includes("a + b") || code.includes("a+b")
+    },
+    Intermediate: {
+      title: "Valid Parentheses",
+      description: "Check if the input string has valid matching brackets '()', '{}', '[]'.",
+      example: "Input: '()[]{}' -> true",
+      hints: ["Use a Stack", "Push open brackets, pop closed ones"],
+      starterCode: "function isValid(s) {\n  // Write logic\n}",
+      testCase: (code) => code.includes("stack") || code.includes("[]")
+    },
+    Advanced: {
+      title: "Merge K Sorted Lists",
+      description: "Merge k linked lists into one sorted list.",
+      example: "Input: [[1,4],[1,3],[2,6]] -> [1,1,2,3,4,6]",
+      hints: ["Use a Min-Heap", "Compare heads of lists"],
+      starterCode: "function mergeKLists(lists) {\n  // Write logic\n}",
+      testCase: (code) => code.includes("heap")
+    }
   },
-  Intermediate: {
-    title: "Valid Parentheses",
-    description: "Given a string containing only '(', ')', '{', '}', '[' and ']', determine if the input string is valid.",
-    example: "Input: s = '()[]{}' -> true\nInput: s = '(]' -> false",
-    hints: [
-      "Use a stack data structure.",
-      "Push opening brackets onto the stack.",
-      "When you see a closing bracket, check if it matches the top of the stack."
-    ],
-    starterCode: "function isValid(s) {\n  // Write your code here\n  \n}",
-    testCase: (code) => code.includes("stack") || code.includes("[]")
+
+  // --- FRONTEND TRACK ---
+  Frontend: {
+    Beginner: {
+      title: "Change Background Color",
+      description: "Write a function that changes the body background color to 'blue'.",
+      example: "Input: call function -> Body becomes blue",
+      hints: ["Use document.body", "style.backgroundColor"],
+      starterCode: "function makeBlue() {\n  // Write logic\n}",
+      testCase: (code) => code.includes("document.body.style.backgroundColor")
+    },
+    Intermediate: {
+      title: "Create a Counter",
+      description: "Create a closure that increments a counter.",
+      example: "const c = createCounter(); c() // 1",
+      hints: ["Return a function", "Use a let variable outside"],
+      starterCode: "function createCounter() {\n  // Write logic\n}",
+      testCase: (code) => code.includes("return function")
+    },
+    Advanced: {
+      title: "Debounce Function",
+      description: "Implement a debounce function that limits execution rate.",
+      example: "debounce(fn, 1000)",
+      hints: ["Use setTimeout", "clearTimeout"],
+      starterCode: "function debounce(fn, t) {\n  // Write logic\n}",
+      testCase: (code) => code.includes("setTimeout")
+    }
   },
-  Advanced: {
-    title: "Merge K Sorted Lists",
-    description: "You are given an array of k linked-lists lists, each linked-list is sorted in ascending order. Merge all the linked-lists into one sorted linked-list.",
-    example: "Input: lists = [[1,4,5],[1,3,4],[2,6]] -> [1,1,2,3,4,4,5,6]",
-    hints: [
-      "Compare the head of every list.",
-      "Use a Min-Heap (Priority Queue) to efficiently find the smallest element.",
-      "Time complexity should be O(N log k)."
-    ],
-    starterCode: "function mergeKLists(lists) {\n  // Write your code here\n  \n}",
-    testCase: (code) => code.includes("heap") || code.includes("priority")
+
+  // --- BACKEND TRACK ---
+  Backend: {
+    Beginner: {
+      title: "Basic Express Route",
+      description: "Write code to set up a GET route at '/' that returns 'Hello'.",
+      example: "GET / -> 'Hello'",
+      hints: ["app.get", "res.send"],
+      starterCode: "app.get('/', (req, res) => {\n  // Write logic\n})",
+      testCase: (code) => code.includes("res.send")
+    },
+    Intermediate: {
+      title: "Middleware Auth",
+      description: "Write a middleware function to check if a token exists.",
+      example: "No token -> 403 Forbidden",
+      hints: ["Check req.headers", "call next()"],
+      starterCode: "function auth(req, res, next) {\n  // Write logic\n}",
+      testCase: (code) => code.includes("next()")
+    },
+    Advanced: {
+      title: "MongoDB Connection",
+      description: "Write the code to connect to MongoDB using Mongoose.",
+      example: "mongoose.connect(...)",
+      hints: ["Use mongoose.connect", "Handle promises"],
+      starterCode: "mongoose.connect(uri).then(() => {\n  // Write logic\n})",
+      testCase: (code) => code.includes("mongoose.connect")
+    }
   }
 };

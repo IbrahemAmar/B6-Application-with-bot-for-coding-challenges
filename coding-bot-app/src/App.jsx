@@ -3,16 +3,19 @@ import Navbar from './components/Navbar';
 import AuthPage from './pages/AuthPage';
 import HistoryPage from './pages/HistoryPage';
 import ChallengePage from './pages/ChallengePage';
+import SettingsPage from './pages/SettingsPage';
+
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentView, setCurrentView] = useState('auth');
   
   // --- NEW: User Stats ---
-  // Default level is Beginner, User has 0 XP
-  const [userLevel, setUserLevel] = useState('Beginner'); 
+  const [userLevel, setUserLevel] = useState('Beginner');
   const [userXP, setUserXP] = useState(0);
   const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');         
+  const [userPreference, setUserPreference] = useState('Algorithms');
 
   // 2. Update the handleLogin function
 const handleLogin = (userData) => {
@@ -22,7 +25,9 @@ const handleLogin = (userData) => {
   if (userData) {
     setUserLevel(userData.level);
     setUserXP(userData.xp);
-    setUserEmail(userData.email); // <--- STORE EMAIL HERE
+    setUserEmail(userData.email);
+    setUserName(userData.username);     
+    setUserPreference(userData.preference);
   }
 };
 
@@ -38,7 +43,8 @@ const handleLogin = (userData) => {
         <Navbar 
           currentView={currentView} 
           setView={setCurrentView} 
-          onLogout={handleLogout} 
+          onLogout={handleLogout}
+          userName={userName} 
         />
       )}
 
@@ -52,11 +58,20 @@ const handleLogin = (userData) => {
                 userLevel={userLevel} 
                 userXP={userXP}
                 userEmail={userEmail}
+                userPreference={userPreference}
                 setUserXP={setUserXP}
                 setUserLevel={setUserLevel}
               />
             )}
             {currentView === 'history' && <HistoryPage />}
+            {/* NEW SETTINGS PAGE */}
+            {currentView === 'settings' && (
+              <SettingsPage 
+                userEmail={userEmail}
+                userPreference={userPreference}
+                setUserPreference={setUserPreference}
+              />
+            )}
             {currentView === 'dashboard' && (
               <div className="text-center py-20 text-gray-400">
                 Dashboard Placeholder

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { problemDatabase } from '../problems'; 
 
-const ChallengePage = ({ userLevel, userXP, setUserXP, setUserLevel, userEmail }) => {
+const ChallengePage = ({ userLevel, userXP, setUserXP, setUserLevel, userEmail, userPreference}) => {
   // 1. Get the current problem based on the User's Level
-  const problem = problemDatabase[userLevel];
+  const problem = problemDatabase[userPreference][userLevel];
 
   const [code, setCode] = useState(problem.starterCode);
   const [testStatus, setTestStatus] = useState('idle'); 

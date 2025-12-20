@@ -24,65 +24,69 @@ app.get('/', (req, res) => {
   res.send('API is running...');
 });
 
-// NEW: Registration Route
+// 1. UPDATE REGISTER: Save the 'preference' field
 app.post('/api/register', async (req, res) => {
   try {
-    // 1. Get data from the frontend
-    const { username, email, password, level } = req.body;
+    const { username, email, password, level, preference } = req.body; // <--- ADD PREFERENCE
 
-    // 2. Check if user already exists
     const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
-    }
+    if (existingUser) return res.status(400).json({ message: "User already exists" });
 
-    // 3. Create a new user in the database
     const newUser = new User({ 
       username, 
       email, 
       password,
-      level: level || 'Beginner' 
+      level: level || 'Beginner',
+      preference: preference || 'Algorithms' // <--- SAVE IT
     });
 
-    await newUser.save(); // <--- THIS SAVES TO MONGO DB!
-
-    res.status(201).json({ message: "User created successfully!" });
-
+    await newUser.save();
+    res.status(201).json({ message: "User created!" });
   } catch (error) {
-    res.status(500).json({ message: "Server Error", error: error.message });
+    res.status(500).json({ message: "Error", error: error.message });
   }
 });
 
-// NEW: Login Route
+// 2. UPDATE LOGIN: Send back the username and preference
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // 1. Find user by email
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: "User not found" });
+    
+    if (!user || user.password !== password) {
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // 2. Check password (Simple comparison for now)
-    // Note: In a real production app, we would use encryption (bcrypt) here.
-    if (user.password !== password) {
-      return res.status(400).json({ message: "Invalid password" });
-    }
-
-    // 3. Send back the user's profile (Level, XP, Name)
     res.json({
       message: "Login Successful",
       user: {
-        username: user.username,
+        username: user.username, // <--- SEND USERNAME
         email: user.email,
         level: user.level,
-        xp: user.xp
+        xp: user.xp,
+        preference: user.preference || 'Algorithms' // <--- SEND PREFERENCE
       }
     });
-
   } catch (error) {
-    res.status(500).json({ message: "Server Error", error: error.message });
+    res.status(500).json({ message: "Error", error: error.message });
+  }
+});
+
+// 3. NEW ROUTE: Update User Settings
+app.put('/api/user/update', async (req, res) => {
+  try {
+    const { email, preference } = req.body;
+    
+    // Find user and update ONLY the preference
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.preference = preference;
+    await user.save();
+
+    res.json({ message: "Preference updated!", preference: user.preference });
+  } catch (error) {
+    res.status(500).json({ message: "Error", error: error.message });
   }
 });
 
