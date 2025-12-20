@@ -12,13 +12,19 @@ function App() {
   // Default level is Beginner, User has 0 XP
   const [userLevel, setUserLevel] = useState('Beginner'); 
   const [userXP, setUserXP] = useState(0);
+  const [userEmail, setUserEmail] = useState('');
 
-  // Updated Login: Accepts the level chosen in the Register form
-  const handleLogin = (selectedLevel) => {
-    if (selectedLevel) setUserLevel(selectedLevel); // Set level from registration
-    setIsLoggedIn(true);
-    setCurrentView('challenge');
-  };
+  // 2. Update the handleLogin function
+const handleLogin = (userData) => {
+  setIsLoggedIn(true);
+  setCurrentView('challenge');
+  
+  if (userData) {
+    setUserLevel(userData.level);
+    setUserXP(userData.xp);
+    setUserEmail(userData.email); // <--- STORE EMAIL HERE
+  }
+};
 
   const handleLogout = () => {
     setIsLoggedIn(false);
@@ -45,6 +51,7 @@ function App() {
               <ChallengePage 
                 userLevel={userLevel} 
                 userXP={userXP}
+                userEmail={userEmail}
                 setUserXP={setUserXP}
                 setUserLevel={setUserLevel}
               />
