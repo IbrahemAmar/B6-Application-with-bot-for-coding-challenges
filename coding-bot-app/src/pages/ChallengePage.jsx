@@ -1,66 +1,196 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+// We import the database we created in Step 1
+import { problemDatabase } from '../problems'; 
 
-const ChallengePage = () => {
+const ChallengePage = ({ userLevel, userXP, setUserXP, setUserLevel }) => {
+  // 1. Get the current problem based on the User's Level
+  const problem = problemDatabase[userLevel];
+
+  // 2. Local State for this specific challenge
+  const [code, setCode] = useState(problem.starterCode);
+  const [testStatus, setTestStatus] = useState('idle'); // 'idle', 'running', 'success', 'error'
+  const [hintsRevealed, setHintsRevealed] = useState(0);
+  const [feedbackMsg, setFeedbackMsg] = useState('');
+
+  // Reset code when the level changes (e.g. User promotes to Intermediate)
+  useEffect(() => {
+    setCode(problem.starterCode);
+    setTestStatus('idle');
+    setHintsRevealed(0);
+    setFeedbackMsg('');
+  }, [userLevel]);
+
+  // 3. Handle "Run Tests" Logic
+  const handleRunTests = () => {
+    setTestStatus('running');
+    setFeedbackMsg('AI Bot is analyzing your code...');
+
+    setTimeout(() => {
+      // Check if the code passes using our "Fake Database" logic
+      const isCorrect = problem.testCase(code);
+
+      if (isCorrect) {
+        handleSuccess();
+      } else {
+        setTestStatus('error');
+        setFeedbackMsg('Bot: Incorrect solution. Try using the hints!');
+      }
+    }, 1500);
+  };
+
+  // 4. Handle Success & Level Up Logic
+  const handleSuccess = () => {
+    setTestStatus('success');
+    
+    // Give 50 XP for a correct answer
+    const newXP = userXP + 50;
+    setUserXP(newXP);
+    
+    let promotionMessage = "Great job! +50 XP";
+
+    // CHECK FOR PROMOTION
+    if (userLevel === 'Beginner' && newXP >= 100) {
+      setUserLevel('Intermediate');
+      promotionMessage = "🎉 LEVEL UP! You are now Intermediate!";
+    } else if (userLevel === 'Intermediate' && newXP >= 200) {
+      setUserLevel('Advanced');
+      promotionMessage = "🚀 LEVEL UP! You are now Advanced!";
+    }
+
+    setFeedbackMsg(promotionMessage);
+  };
+
   return (
     <div className="max-w-7xl mx-auto bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[600px]">
-      <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+      
+      {/* Header: Shows Level and XP Progress */}
+      <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Valid Parentheses</h2>
-          <span className="mt-2 inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded font-medium">
-            Intermediate
-          </span>
+          <h2 className="text-2xl font-bold text-gray-800">{problem.title}</h2>
+          <div className="flex items-center gap-3 mt-2">
+            {/* dynamic badge color */}
+            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
+              userLevel === 'Beginner' ? 'bg-green-100 text-green-700' :
+              userLevel === 'Intermediate' ? 'bg-yellow-100 text-yellow-700' :
+              'bg-red-100 text-red-700'
+            }`}>
+              {userLevel}
+            </span>
+            <span className="text-sm font-medium text-blue-600">
+              {userXP} XP
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-           <span className="text-gray-400 text-sm">Difficulty (fake)</span>
-           <select className="border border-gray-200 rounded px-2 py-1 text-sm bg-white">
-             <option>Intermediate</option>
-           </select>
+
+        {/* XP Progress Bar */}
+        <div className="w-48">
+          <div className="flex justify-between text-xs text-gray-500 mb-1">
+            <span>Progress to next level</span>
+            <span>{userXP % 100} / 100</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
+              style={{ width: `${(userXP % 100)}%` }}
+            ></div>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2">
-        {/* Left Column: Problem Desc */}
-        <div className="p-6 border-r border-gray-100 bg-gray-50/30">
+        {/* Left Column: Problem & Hints */}
+        <div className="p-6 border-r border-gray-100 bg-white">
           <h3 className="font-semibold text-gray-700 mb-2">Description</h3>
           <p className="text-gray-600 mb-6 leading-relaxed">
-            Given a string containing only '(', ')', '{', '}', '[' and ']', determine if the input string is valid.
+            {problem.description}
           </p>
 
-          <h3 className="font-semibold text-gray-700 mb-2">Input / Output Example</h3>
-          <div className="bg-gray-100 p-4 rounded-lg font-mono text-sm text-gray-700 mb-6">
-            {/* FIXED: Wrapped in brackets and quotes to treat as a string */}
-            <p>{'Input: s = "()[]{}" -> true'}</p>
-            <p>{'Input: s = "(]" -> false'}</p>
+          <h3 className="font-semibold text-gray-700 mb-2">Example</h3>
+          <div className="bg-gray-100 p-4 rounded-lg font-mono text-sm text-gray-700 mb-6 whitespace-pre-wrap">
+            {problem.example}
           </div>
 
-          <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 h-32 flex items-center justify-center text-gray-400">
-            Bot hints
+          {/* Bot Interaction Zone */}
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-bold text-blue-800 flex items-center gap-2">
+                🤖 AI Tutor
+              </h4>
+              <span className="text-xs text-blue-600 font-medium">
+                {hintsRevealed} / 3 Hints used
+              </span>
+            </div>
+
+            <div className="space-y-3 min-h-[80px]">
+              {hintsRevealed === 0 && (
+                <p className="text-blue-600 text-sm italic">
+                  "I'm here to help! Click 'Ask for hint' if you get stuck."
+                </p>
+              )}
+              {/* Show revealed hints */}
+              {problem.hints.slice(0, hintsRevealed).map((hint, i) => (
+                <div key={i} className="bg-white p-2 rounded border border-blue-100 text-sm text-gray-700 shadow-sm animate-fade-in">
+                  💡 <strong>Hint {i + 1}:</strong> {hint}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Right Column: Code Editor */}
-        <div className="p-6 flex flex-col">
+        <div className="p-6 flex flex-col bg-gray-50/50">
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-semibold text-gray-700">Your solution</h3>
+            <span className="text-xs text-gray-400">JavaScript</span>
           </div>
+          
           <textarea
-            className="flex-1 w-full bg-white border border-gray-200 rounded-lg p-4 font-mono text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
-            rows="10"
-            defaultValue="// Write your solution here..."
+            className="flex-1 w-full bg-white border border-gray-200 rounded-lg p-4 font-mono text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none shadow-sm"
+            rows="12"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            spellCheck="false"
           ></textarea>
 
           <div className="flex gap-4 mb-6">
-            <button className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-medium transition-colors">
+            <button 
+              onClick={() => setHintsRevealed(prev => Math.min(prev + 1, 3))}
+              className="flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 py-2 rounded-lg font-medium transition-colors"
+            >
               Ask for hint
             </button>
-            <button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-medium transition-colors">
-              Run tests
+            
+            <button 
+              onClick={handleRunTests}
+              disabled={testStatus === 'running'}
+              className={`flex-1 text-white py-2 rounded-lg font-medium transition-colors flex justify-center items-center shadow-sm ${
+                testStatus === 'running' ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'
+              }`}
+            >
+              {testStatus === 'running' ? 'Running...' : 'Run tests'}
             </button>
           </div>
 
-           <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
-             <h4 className="font-semibold text-gray-700 mb-1">Test results</h4>
-             <p className="text-gray-500 text-sm">No tests run yet.</p>
+           {/* Feedback Area */}
+           <div className={`border rounded-lg p-4 transition-all duration-500 ${
+             testStatus === 'success' ? 'bg-green-100 border-green-200' :
+             testStatus === 'error' ? 'bg-red-50 border-red-200' :
+             'bg-white border-gray-200'
+           }`}>
+             <h4 className={`font-bold mb-1 ${
+               testStatus === 'success' ? 'text-green-800' :
+               testStatus === 'error' ? 'text-red-700' :
+               'text-gray-700'
+             }`}>
+               {testStatus === 'success' ? 'Test Results: PASSED' : 
+                testStatus === 'error' ? 'Test Results: FAILED' : 'Test Results'}
+             </h4>
+             <p className={`text-sm ${
+               testStatus === 'success' ? 'text-green-700' :
+               testStatus === 'error' ? 'text-red-600' : 'text-gray-500'
+             }`}>
+               {feedbackMsg || "Run your code to see results."}
+             </p>
            </div>
         </div>
       </div>

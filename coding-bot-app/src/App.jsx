@@ -5,20 +5,58 @@ import HistoryPage from './pages/HistoryPage';
 import ChallengePage from './pages/ChallengePage';
 
 function App() {
-  const [currentView, setCurrentView] = useState('auth'); // Default view
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentView, setCurrentView] = useState('auth');
+  
+  // --- NEW: User Stats ---
+  // Default level is Beginner, User has 0 XP
+  const [userLevel, setUserLevel] = useState('Beginner'); 
+  const [userXP, setUserXP] = useState(0);
+
+  // Updated Login: Accepts the level chosen in the Register form
+  const handleLogin = (selectedLevel) => {
+    if (selectedLevel) setUserLevel(selectedLevel); // Set level from registration
+    setIsLoggedIn(true);
+    setCurrentView('challenge');
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setCurrentView('auth');
+    setUserXP(0); // Reset XP on logout
+  };
 
   return (
-    <div className="min-h-screen pb-10">
-      <Navbar currentView={currentView} setView={setCurrentView} />
+    <div className="min-h-screen pb-10 font-sans text-gray-800">
+      {isLoggedIn && (
+        <Navbar 
+          currentView={currentView} 
+          setView={setCurrentView} 
+          onLogout={handleLogout} 
+        />
+      )}
 
-      <main className="container mx-auto px-4">
-        {currentView === 'auth' && <AuthPage />}
-        {currentView === 'challenge' && <ChallengePage />}
-        {currentView === 'history' && <HistoryPage />}
-        {currentView === 'dashboard' && (
-          <div className="text-center py-20 text-gray-400">
-            Dashboard Placeholder
-          </div>
+      <main className="container mx-auto px-4 mt-8">
+        {!isLoggedIn ? (
+          <AuthPage onLogin={handleLogin} />
+        ) : (
+          <>
+            {currentView === 'challenge' && (
+              <ChallengePage 
+                userLevel={userLevel} 
+                userXP={userXP}
+                setUserXP={setUserXP}
+                setUserLevel={setUserLevel}
+              />
+            )}
+            {currentView === 'history' && <HistoryPage />}
+            {currentView === 'dashboard' && (
+              <div className="text-center py-20 text-gray-400">
+                Dashboard Placeholder
+              </div>
+            )}
+            {currentView === 'auth' && <ChallengePage userLevel={userLevel} />} 
+          </>
         )}
       </main>
     </div>
