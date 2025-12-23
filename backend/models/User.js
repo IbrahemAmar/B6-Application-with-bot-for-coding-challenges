@@ -2,18 +2,19 @@ const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true },
-  email:    { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  level:    { type: String, default: 'Beginner' },
-  xp:       { type: Number, default: 0 },
-  preference: { type: String, default: 'Algorithms' }, 
-  
+  level: { type: String, default: 'Beginner' },
+  xp: { type: Number, default: 0 },
+  preference: { type: String, default: 'Algorithms' },
+
   history: [
     {
       title: String,
       difficulty: String,
       score: Number,
-      date: { type: Date, default: Date.now }
+      duration: Number, // ⏱️ seconds
+      date: Date
     }
   ]
 });

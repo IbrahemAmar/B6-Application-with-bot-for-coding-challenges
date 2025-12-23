@@ -5,57 +5,63 @@ import HistoryPage from './pages/HistoryPage';
 import ChallengePage from './pages/ChallengePage';
 import SettingsPage from './pages/SettingsPage';
 
-
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentView, setCurrentView] = useState('auth');
-  
-  // --- NEW: User Stats ---
+
+  // --- User State ---
   const [userLevel, setUserLevel] = useState('Beginner');
   const [userXP, setUserXP] = useState(0);
   const [userEmail, setUserEmail] = useState('');
-  const [userName, setUserName] = useState('');         
+  const [userName, setUserName] = useState('');
   const [userPreference, setUserPreference] = useState('Algorithms');
 
-  // 2. Update the handleLogin function
-const handleLogin = (userData) => {
-  setIsLoggedIn(true);
-  setCurrentView('challenge');
-  
-  if (userData) {
-    setUserLevel(userData.level);
-    setUserXP(userData.xp);
-    setUserEmail(userData.email);
-    setUserName(userData.username);     
-    setUserPreference(userData.preference);
-  }
-};
+  // --- LOGIN ---
+  const handleLogin = (userData) => {
+    setIsLoggedIn(true);
+    setCurrentView('challenge');
 
+    if (userData) {
+      setUserLevel(userData.level || 'Beginner');
+      setUserXP(userData.xp || 0);
+      setUserEmail(userData.email || '');
+      setUserName(userData.username || '');
+      setUserPreference(userData.preference || 'Algorithms');
+    }
+  };
+
+  // --- LOGOUT ---
   const handleLogout = () => {
     setIsLoggedIn(false);
     setCurrentView('auth');
-    setUserXP(0); // Reset XP on logout
+    setUserXP(0);
+    setUserEmail('');
+    setUserName('');
   };
 
   return (
     <div className="min-h-screen pb-10 font-sans text-gray-800">
+
+      {/* Navbar */}
       {isLoggedIn && (
-        <Navbar 
-          currentView={currentView} 
-          setView={setCurrentView} 
+        <Navbar
+          currentView={currentView}
+          setView={setCurrentView}
           onLogout={handleLogout}
-          userName={userName} 
+          userName={userName}
         />
       )}
 
       <main className="container mx-auto px-4 mt-8">
+        {/* NOT LOGGED IN */}
         {!isLoggedIn ? (
           <AuthPage onLogin={handleLogin} />
         ) : (
           <>
+            {/* CHALLENGE */}
             {currentView === 'challenge' && (
-              <ChallengePage 
-                userLevel={userLevel} 
+              <ChallengePage
+                userLevel={userLevel}
                 userXP={userXP}
                 userEmail={userEmail}
                 userPreference={userPreference}
@@ -63,21 +69,27 @@ const handleLogin = (userData) => {
                 setUserLevel={setUserLevel}
               />
             )}
-            {currentView === 'history' && <HistoryPage />}
-            {/* NEW SETTINGS PAGE */}
+
+            {/* HISTORY */}
+            {currentView === 'history' && (
+              <HistoryPage userEmail={userEmail} />
+            )}
+
+            {/* SETTINGS */}
             {currentView === 'settings' && (
-              <SettingsPage 
+              <SettingsPage
                 userEmail={userEmail}
                 userPreference={userPreference}
                 setUserPreference={setUserPreference}
               />
             )}
+
+            {/* DASHBOARD (OPTIONAL PLACEHOLDER) */}
             {currentView === 'dashboard' && (
               <div className="text-center py-20 text-gray-400">
                 Dashboard Placeholder
               </div>
             )}
-            {currentView === 'auth' && <ChallengePage userLevel={userLevel} />} 
           </>
         )}
       </main>

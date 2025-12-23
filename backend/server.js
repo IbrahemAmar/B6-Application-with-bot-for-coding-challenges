@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
-// Import the Blueprint we just created
 const User = require('./models/User');
 
 const app = express();
@@ -13,46 +12,50 @@ app.use(cors());
 app.use(express.json());
 
 // --- DATABASE CONNECTION ---
-// Now we use the secure variable from .env
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected!'))
   .catch(err => console.error('❌ Connection Error:', err));
 
-// --- ROUTES (The Menu) ---
+// --- ROUTES ---
 
 app.get('/', (req, res) => {
   res.send('API is running...');
 });
 
-// 1. UPDATE REGISTER: Save the 'preference' field
+// --- REGISTER ---
 app.post('/api/register', async (req, res) => {
   try {
-    const { username, email, password, level, preference } = req.body; // <--- ADD PREFERENCE
+    const { username, email, password, level, preference } = req.body;
 
     const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ message: "User already exists" });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
 
-    const newUser = new User({ 
-      username, 
-      email, 
+    const newUser = new User({
+      username,
+      email,
       password,
       level: level || 'Beginner',
-      preference: preference || 'Algorithms' // <--- SAVE IT
+      preference: preference || 'Algorithms',
+      xp: 0,
+      history: []
     });
 
     await newUser.save();
     res.status(201).json({ message: "User created!" });
+
   } catch (error) {
     res.status(500).json({ message: "Error", error: error.message });
   }
 });
 
-// 2. UPDATE LOGIN: Send back the username and preference
+// --- LOGIN ---
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+
     const user = await User.findOne({ email });
-    
     if (!user || user.password !== password) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
@@ -60,69 +63,87 @@ app.post('/api/login', async (req, res) => {
     res.json({
       message: "Login Successful",
       user: {
-        username: user.username, // <--- SEND USERNAME
+        username: user.username,
         email: user.email,
         level: user.level,
         xp: user.xp,
-        preference: user.preference || 'Algorithms' // <--- SEND PREFERENCE
+        preference: user.preference,
+        history: user.history
       }
     });
+
   } catch (error) {
     res.status(500).json({ message: "Error", error: error.message });
   }
 });
 
-// 3. NEW ROUTE: Update User Settings
+// --- UPDATE USER SETTINGS ---
 app.put('/api/user/update', async (req, res) => {
   try {
     const { email, preference } = req.body;
-    
-    // Find user and update ONLY the preference
+
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
     user.preference = preference;
     await user.save();
 
-    res.json({ message: "Preference updated!", preference: user.preference });
+    res.json({ message: "Preference updated!", preference });
+
   } catch (error) {
     res.status(500).json({ message: "Error", error: error.message });
   }
 });
 
-// NEW: Update User Progress (XP + History)
+// --- SOLVE CHALLENGE (NO DOUBLE XP) ---
 app.post('/api/solve', async (req, res) => {
   try {
-    const { email, title, difficulty, score } = req.body;
+    const { email, title, difficulty, score, duration } = req.body;
 
-    // 1. Find the user
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
-    // 2. Add XP
-    user.xp += score;
+    // 🔍 Check if already solved before
+    const alreadySolved = user.history.some(
+      h => h.title === title
+    );
 
-    // 3. Check for Level Up (Simple Logic)
-    if (user.level === 'Beginner' && user.xp >= 100) user.level = 'Intermediate';
-    if (user.level === 'Intermediate' && user.xp >= 200) user.level = 'Advanced';
+    let gainedXP = 0;
 
-    // 4. Add to History
+    // ➕ Add XP only if first time
+    if (!alreadySolved) {
+      user.xp += score;
+      gainedXP = score;
+    }
+
+    // 🧠 Level logic
+    if (user.xp >= 200) user.level = 'Advanced';
+    else if (user.xp >= 100) user.level = 'Intermediate';
+    else user.level = 'Beginner';
+
+    // 🕒 Always add history (new attempt)
     user.history.push({
       title,
       difficulty,
-      score,
+      score: gainedXP,   // 0 if already solved
+      duration,
       date: new Date()
     });
 
-    // 5. Save changes to MongoDB
     await user.save();
 
-    res.json({ 
-      message: "Progress Saved!", 
+    res.json({
+      message: alreadySolved
+        ? "Solved again (time recorded, no XP gained)"
+        : "Challenge solved!",
+      gainedXP,
       updatedUser: {
         level: user.level,
-        xp: user.xp,
-        history: user.history
+        xp: user.xp
       }
     });
 
@@ -131,7 +152,27 @@ app.post('/api/solve', async (req, res) => {
   }
 });
 
-// Start Server
+// --- GET HISTORY ---
+app.get('/api/history/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json([...user.history].reverse());
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch history",
+      error: error.message
+    });
+  }
+});
+
+// --- START SERVER ---
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`🚀 Server is running on port ${PORT}`);
 });
