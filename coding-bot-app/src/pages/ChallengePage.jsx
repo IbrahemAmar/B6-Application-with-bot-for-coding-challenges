@@ -20,8 +20,12 @@ const ChallengePage = ({
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [startTime, setStartTime] = useState(null);
 
+  // HINT STATES
+  const [hint, setHint] = useState('');
+  const [hintLoading, setHintLoading] = useState(false);
+
   // --------------------
-  // FETCH CHALLENGES FOR LEVEL (WITH SOLVED FLAG)
+  // FETCH CHALLENGES
   // --------------------
   useEffect(() => {
     const fetchChallenges = async () => {
@@ -47,14 +51,15 @@ const ChallengePage = ({
     setTestStatus('idle');
     setFeedbackMsg('');
     setStartTime(null);
+    setHint('');
+    setHintLoading(false);
   };
 
   // --------------------
-  // SELECT CHALLENGE (READ MODE ONLY)
+  // SELECT CHALLENGE
   // --------------------
-  const handleSelectChallenge = async (challenge) => {
+  const handleSelectChallenge = (challenge) => {
     if (hasStarted || challenge.solved) return;
-
     resetState();
     setProblem(challenge);
   };
@@ -69,6 +74,7 @@ const ChallengePage = ({
     setStartTime(Date.now());
     setCode(problem.starterCode || '');
     setFeedbackMsg('');
+    setHint('');
   };
 
   // --------------------
@@ -81,17 +87,14 @@ const ChallengePage = ({
     setFeedbackMsg('AI Bot is testing your code...');
 
     try {
-      const res = await fetch(
-        'http://localhost:5000/api/challenge/judge',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            code,
-            challengeId: problem.id
-          })
-        }
-      );
+      const res = await fetch('http://localhost:5000/api/challenge/judge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          challengeId: problem.id
+        })
+      });
 
       const data = await res.json();
 
@@ -108,7 +111,36 @@ const ChallengePage = ({
   };
 
   // --------------------
-  // SUCCESS HANDLER
+  // ASK HINT
+  // --------------------
+  const handleAskHint = async () => {
+    if (!hasStarted || !problem) return;
+
+    setHintLoading(true);
+    setHint('');
+
+    try {
+      const res = await fetch('http://localhost:5000/api/challenge/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId: problem.id,
+          code,
+          level: userLevel
+        })
+      });
+
+      const data = await res.json();
+      setHint(data.hint || 'No hint available.');
+    } catch {
+      setHint('AI hint service is not available.');
+    } finally {
+      setHintLoading(false);
+    }
+  };
+
+  // --------------------
+  // SUCCESS
   // --------------------
   const handleSuccess = async () => {
     setTestStatus('success');
@@ -135,7 +167,6 @@ const ChallengePage = ({
         setUserLevel(data.updatedUser.level);
         setFeedbackMsg(`✅ Solved! Total XP: ${data.updatedUser.xp}`);
 
-        // refresh challenge list to lock solved challenge
         const refreshed = await fetch(
           `http://localhost:5000/api/challenges?type=${userPreference}&level=${userLevel}&email=${userEmail}`
         );
@@ -163,7 +194,7 @@ const ChallengePage = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-3">
 
-        {/* LEFT: CHALLENGE LIST */}
+        {/* LEFT */}
         <div className="p-6 border-r">
           <h3 className="font-semibold mb-3">Challenges</h3>
           <ul className="space-y-2">
@@ -171,12 +202,10 @@ const ChallengePage = ({
               <li
                 key={c.id}
                 onClick={() => handleSelectChallenge(c)}
-                className={`p-2 rounded border flex justify-between items-center
-                  ${c.solved
+                className={`p-2 rounded border flex justify-between
+                  ${c.solved || hasStarted
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : hasStarted
-                      ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
-                      : 'cursor-pointer hover:bg-gray-100'
+                    : 'cursor-pointer hover:bg-gray-100'
                   }`}
               >
                 <span>{c.title}</span>
@@ -186,7 +215,7 @@ const ChallengePage = ({
           </ul>
         </div>
 
-        {/* MIDDLE: DESCRIPTION */}
+        {/* MIDDLE */}
         <div className="p-6 border-r">
           {!problem ? (
             <div className="text-gray-500 italic text-center mt-10">
@@ -206,7 +235,6 @@ const ChallengePage = ({
                   Input:
                   {problem.example.input}
 
-                  {"\n"}
                   Output:
                   {problem.example.output}
                 </pre>
@@ -215,7 +243,7 @@ const ChallengePage = ({
           )}
         </div>
 
-        {/* RIGHT: EDITOR */}
+        {/* RIGHT */}
         <div className="p-6">
           <button
             onClick={handleStartSolving}
@@ -244,6 +272,25 @@ const ChallengePage = ({
             Run tests
           </button>
 
+          <button
+            onClick={handleAskHint}
+            disabled={!hasStarted || hintLoading}
+            className={`mt-2 px-4 py-2 rounded text-white
+              ${!hasStarted || hintLoading
+                ? 'bg-gray-400'
+                : 'bg-purple-600 hover:bg-purple-700'
+              }`}
+          >
+            {hintLoading ? 'Thinking...' : 'Ask Hint'}
+          </button>
+
+          {hint && (
+            <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded text-sm">
+              🤖 <strong>Hint:</strong>
+              <p className="mt-1">{hint}</p>
+            </div>
+          )}
+
           <div className="mt-4 text-sm">{feedbackMsg}</div>
         </div>
 
@@ -253,4 +300,3 @@ const ChallengePage = ({
 };
 
 export default ChallengePage;
-

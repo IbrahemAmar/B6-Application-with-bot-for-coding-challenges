@@ -266,6 +266,16 @@ app.post('/api/challenge/judge', (req, res) => {
     });
   }
 });
+// --------------------
+// HINT (TEMP / NO AI YET)
+// --------------------
+app.post('/api/challenge/hint', (req, res) => {
+  const { challengeId, level } = req.body;
+
+  return res.json({
+    hint: `Think about the main logic of the problem. Start with a simple approach (${level} level).`
+  });
+});
 
 // --------------------
 // START SERVER
