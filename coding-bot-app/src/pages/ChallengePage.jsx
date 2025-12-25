@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { problemDatabase } from '../problems';
+import React, { useEffect, useState } from 'react';
 
 const ChallengePage = ({
   userLevel,
@@ -10,238 +9,291 @@ const ChallengePage = ({
   userPreference
 }) => {
 
-  // --- GET CURRENT PROBLEM ---
-  const problem = problemDatabase[userPreference][userLevel];
-
-  // 🔒 EDGE CASE GUARD
-  if (!problem) {
-    return (
-      <div className="max-w-3xl mx-auto mt-20 p-6 bg-white border rounded-lg text-center">
-        <h2 className="text-xl font-bold text-gray-800 mb-2">
-          No challenge available
-        </h2>
-        <p className="text-gray-600">
-          There is currently no challenge for your level or learning path.
-        </p>
-      </div>
-    );
-  }
-
-  // --- STATES ---
-  const [code, setCode] = useState(problem.starterCode);
-  const [testStatus, setTestStatus] = useState('idle');
-  const [hintsRevealed, setHintsRevealed] = useState(0);
-  const [feedbackMsg, setFeedbackMsg] = useState('');
-
-  // ⏱️ TIMER STATES
+  // --------------------
+  // STATES
+  // --------------------
+  const [challengeList, setChallengeList] = useState([]);
+  const [problem, setProblem] = useState(null);
+  const [code, setCode] = useState('');
   const [hasStarted, setHasStarted] = useState(false);
+  const [testStatus, setTestStatus] = useState('idle');
+  const [feedbackMsg, setFeedbackMsg] = useState('');
   const [startTime, setStartTime] = useState(null);
 
-  // --- RESET WHEN PROBLEM CHANGES ---
-  useEffect(() => {
-    setCode(problem.starterCode);
-    setTestStatus('idle');
-    setHintsRevealed(0);
-    setFeedbackMsg('');
-    setHasStarted(false);
-    setStartTime(null);
-  }, [userLevel, userPreference]);
+  // HINT STATES
+  const [hint, setHint] = useState('');
+  const [hintLoading, setHintLoading] = useState(false);
 
-  // --- RUN TESTS ---
-  const handleRunTests = () => {
-    if (!hasStarted) {
-      setFeedbackMsg('Please click "Start Solving" first.');
-      return;
-    }
+  // --------------------
+  // FETCH CHALLENGES
+  // --------------------
+  useEffect(() => {
+    const fetchChallenges = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:5000/api/challenges?type=${userPreference}&level=${userLevel}&email=${userEmail}`
+        );
+        const data = await res.json();
+        setChallengeList(data);
+      } catch {
+        setChallengeList([]);
+      }
+    };
+
+    fetchChallenges();
+    resetState();
+  }, [userPreference, userLevel, userEmail]);
+
+  const resetState = () => {
+    setProblem(null);
+    setCode('');
+    setHasStarted(false);
+    setTestStatus('idle');
+    setFeedbackMsg('');
+    setStartTime(null);
+    setHint('');
+    setHintLoading(false);
+  };
+
+  // --------------------
+  // SELECT CHALLENGE
+  // --------------------
+  const handleSelectChallenge = (challenge) => {
+    if (hasStarted || challenge.solved) return;
+    resetState();
+    setProblem(challenge);
+  };
+
+  // --------------------
+  // START SOLVING
+  // --------------------
+  const handleStartSolving = () => {
+    if (!problem || problem.solved) return;
+
+    setHasStarted(true);
+    setStartTime(Date.now());
+    setCode(problem.starterCode || '');
+    setFeedbackMsg('');
+    setHint('');
+  };
+
+  // --------------------
+  // RUN TESTS
+  // --------------------
+  const handleRunTests = async () => {
+    if (!hasStarted || !problem) return;
 
     setTestStatus('running');
-    setFeedbackMsg('AI Bot is analyzing your code...');
+    setFeedbackMsg('AI Bot is testing your code...');
 
-    setTimeout(() => {
-      const isCorrect = problem.testCase(code);
-      if (isCorrect) {
+    try {
+      const res = await fetch('http://localhost:5000/api/challenge/judge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          challengeId: problem.id
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.passed) {
         handleSuccess();
       } else {
         setTestStatus('error');
-        setFeedbackMsg('Bot: Incorrect solution. Try using the hints!');
+        setFeedbackMsg(data.message || 'Incorrect solution');
       }
-    }, 1500);
+    } catch {
+      setTestStatus('error');
+      setFeedbackMsg('Judge server error');
+    }
   };
 
-  // --- SUCCESS HANDLER ---
+  // --------------------
+  // ASK HINT
+  // --------------------
+  const handleAskHint = async () => {
+    if (!hasStarted || !problem) return;
+
+    setHintLoading(true);
+    setHint('');
+
+    try {
+      const res = await fetch('http://localhost:5000/api/challenge/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId: problem.id,
+          code,
+          level: userLevel
+        })
+      });
+
+      const data = await res.json();
+      setHint(data.hint || 'No hint available.');
+    } catch {
+      setHint('AI hint service is not available.');
+    } finally {
+      setHintLoading(false);
+    }
+  };
+
+  // --------------------
+  // SUCCESS
+  // --------------------
   const handleSuccess = async () => {
     setTestStatus('success');
 
-    const earnedScore = 100 - hintsRevealed * 10;
-
-    // ⏱️ CALCULATE DURATION
-    const endTime = Date.now();
-    const durationSeconds = Math.floor((endTime - startTime) / 1000);
-
-    setFeedbackMsg(
-      `Great job! Saving your progress... (+${earnedScore} XP, ${durationSeconds}s)`
-    );
+    const duration = Math.floor((Date.now() - startTime) / 1000);
 
     try {
-      const response = await fetch('http://localhost:5000/api/solve', {
+      const res = await fetch('http://localhost:5000/api/solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: userEmail,
           title: problem.title,
           difficulty: userLevel,
-          score: earnedScore,
-          duration: durationSeconds
-        }),
+          score: 100,
+          duration
+        })
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-
-      if (response.ok) {
+      if (res.ok) {
         setUserXP(data.updatedUser.xp);
         setUserLevel(data.updatedUser.level);
-        setHasStarted(false);
-        setStartTime(null);
-        if (data.gainedXP === 0) {
-          setFeedbackMsg("Solved again! Time recorded, but no XP gained.");
-        } else {
-          setFeedbackMsg(`Great job! +${data.gainedXP} XP`);
-        }
-        if (data.updatedUser.level !== userLevel) {
-          setFeedbackMsg(
-            `🎉 LEVEL UP! You are now ${data.updatedUser.level}!`
-          );
-        } else {
-          setFeedbackMsg(`Saved! Total XP: ${data.updatedUser.xp}`);
-        }
+        setFeedbackMsg(`✅ Solved! Total XP: ${data.updatedUser.xp}`);
+
+        const refreshed = await fetch(
+          `http://localhost:5000/api/challenges?type=${userPreference}&level=${userLevel}&email=${userEmail}`
+        );
+        const updated = await refreshed.json();
+        setChallengeList(updated);
       }
-    } catch (error) {
-      console.error("Save Error:", error);
-      setFeedbackMsg("Solved, but couldn't save to database.");
+    } catch {
+      setFeedbackMsg('Solved, but could not save.');
     }
+
+    setTimeout(resetState, 1200);
   };
 
+  // --------------------
+  // UI
+  // --------------------
   return (
-    <div className="max-w-7xl mx-auto bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-h-[600px]">
+    <div className="max-w-7xl mx-auto bg-white rounded-xl border min-h-[600px]">
 
       {/* HEADER */}
-      <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">{problem.title}</h2>
-          <div className="flex items-center gap-3 mt-2">
-            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${userLevel === 'Beginner'
-              ? 'bg-green-100 text-green-700'
-              : userLevel === 'Intermediate'
-                ? 'bg-yellow-100 text-yellow-700'
-                : 'bg-red-100 text-red-700'
-              }`}>
-              {userLevel}
-            </span>
-            <span className="text-sm font-medium text-blue-600">
-              {userXP} XP
-            </span>
-          </div>
-        </div>
+      <div className="p-6 border-b bg-gray-50 flex justify-between">
+        <h2 className="text-2xl font-bold">Daily Challenges</h2>
+        <span className="font-medium">{userXP} XP</span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3">
 
-        {/* LEFT COLUMN */}
-        <div className="p-6 border-r border-gray-100 bg-white">
-          <h3 className="font-semibold text-gray-700 mb-2">Description</h3>
-          <p className="text-gray-600 mb-6">{problem.description}</p>
-
-          <h3 className="font-semibold text-gray-700 mb-2">Example</h3>
-          <div className="bg-gray-100 p-4 rounded-lg font-mono text-sm mb-6">
-            {problem.example}
-          </div>
-
-          {/* AI TUTOR */}
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-5">
-            <div className="flex justify-between mb-3">
-              <h4 className="font-bold text-blue-800">🤖 AI Tutor</h4>
-              <span className="text-xs text-blue-600">
-                {hintsRevealed} / 3 Hints used
-              </span>
-            </div>
-
-            {hintsRevealed === 0 && (
-              <p className="text-blue-600 text-sm italic">
-                "Click 'Ask for hint' if you get stuck."
-              </p>
-            )}
-
-            {problem.hints.slice(0, hintsRevealed).map((hint, i) => (
-              <div key={i} className="bg-white p-2 rounded border mt-2 text-sm">
-                💡 <strong>Hint {i + 1}:</strong> {hint}
-              </div>
+        {/* LEFT */}
+        <div className="p-6 border-r">
+          <h3 className="font-semibold mb-3">Challenges</h3>
+          <ul className="space-y-2">
+            {challengeList.map(c => (
+              <li
+                key={c.id}
+                onClick={() => handleSelectChallenge(c)}
+                className={`p-2 rounded border flex justify-between
+                  ${c.solved || hasStarted
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'cursor-pointer hover:bg-gray-100'
+                  }`}
+              >
+                <span>{c.title}</span>
+                {c.solved && <span className="text-green-600">✔</span>}
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div className="p-6 flex flex-col bg-gray-50/50">
+        {/* MIDDLE */}
+        <div className="p-6 border-r">
+          {!problem ? (
+            <div className="text-gray-500 italic text-center mt-10">
+              Select a challenge.
+            </div>
+          ) : !hasStarted ? (
+            <div className="text-gray-500 italic text-center mt-10">
+              Click <strong>Start Solving</strong> to view the challenge.
+            </div>
+          ) : (
+            <>
+              <h3 className="font-semibold mb-2">{problem.title}</h3>
+              <p className="text-gray-700">{problem.description}</p>
 
-          {/* START BUTTON */}
+              {problem.example && (
+                <pre className="bg-gray-100 p-4 rounded text-sm mt-4">
+                  Input:
+                  {problem.example.input}
+
+                  Output:
+                  {problem.example.output}
+                </pre>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* RIGHT */}
+        <div className="p-6">
           <button
-            onClick={() => {
-              setHasStarted(true);
-              setStartTime(Date.now());
-            }}
-            disabled={hasStarted}
-            className={`mb-4 py-2 rounded-lg font-semibold ${hasStarted
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
+            onClick={handleStartSolving}
+            disabled={!problem || hasStarted || problem?.solved}
+            className={`mb-4 px-4 py-2 rounded text-white
+              ${!problem || hasStarted || problem?.solved
+                ? 'bg-gray-400'
+                : 'bg-blue-600 hover:bg-blue-700'
               }`}
           >
             {hasStarted ? 'Solving...' : 'Start Solving'}
           </button>
 
           <textarea
-            className="flex-1 w-full bg-white border rounded-lg p-4 font-mono text-sm mb-4 resize-none"
+            className="w-full h-56 border p-3 font-mono"
+            disabled={!hasStarted}
             value={code}
-            onChange={(e) => setCode(e.target.value)}
-            spellCheck="false"
+            onChange={e => setCode(e.target.value)}
           />
 
-          <div className="flex gap-4 mb-6">
-            <button
-              onClick={() => setHintsRevealed(prev => Math.min(prev + 1, 3))}
-              className="flex-1 border text-indigo-600 py-2 rounded-lg"
-            >
-              Ask for hint
-            </button>
+          <button
+            onClick={handleRunTests}
+            disabled={!hasStarted || testStatus === 'running'}
+            className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded"
+          >
+            Run tests
+          </button>
 
-            <button
-              onClick={handleRunTests}
-              disabled={!hasStarted || testStatus === 'running'}
-              className={`flex-1 text-white py-2 rounded-lg ${testStatus === 'running'
-                ? 'bg-emerald-400'
-                : 'bg-emerald-600 hover:bg-emerald-700'
-                }`}
-            >
-              {testStatus === 'running' ? 'Running...' : 'Run tests'}
-            </button>
-          </div>
+          <button
+            onClick={handleAskHint}
+            disabled={!hasStarted || hintLoading}
+            className={`mt-2 px-4 py-2 rounded text-white
+              ${!hasStarted || hintLoading
+                ? 'bg-gray-400'
+                : 'bg-purple-600 hover:bg-purple-700'
+              }`}
+          >
+            {hintLoading ? 'Thinking...' : 'Ask Hint'}
+          </button>
 
-          <div className={`border rounded-lg p-4 ${testStatus === 'success'
-            ? 'bg-green-100 border-green-200'
-            : testStatus === 'error'
-              ? 'bg-red-50 border-red-200'
-              : 'bg-white border-gray-200'
-            }`}>
-            <h4 className="font-bold mb-1">
-              {testStatus === 'success'
-                ? 'PASSED'
-                : testStatus === 'error'
-                  ? 'FAILED'
-                  : 'Test Results'}
-            </h4>
-            <p className="text-sm">{feedbackMsg || 'Run your code to see results.'}</p>
-          </div>
+          {hint && (
+            <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded text-sm">
+              🤖 <strong>Hint:</strong>
+              <p className="mt-1">{hint}</p>
+            </div>
+          )}
 
+          <div className="mt-4 text-sm">{feedbackMsg}</div>
         </div>
+
       </div>
     </div>
   );
