@@ -4,6 +4,7 @@ import AuthPage from './pages/AuthPage';
 import HistoryPage from './pages/HistoryPage';
 import ChallengePage from './pages/ChallengePage';
 import SettingsPage from './pages/SettingsPage';
+import ChallengeGenerator from './components/ChallengeGenerator'; // ✅ Import
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -19,7 +20,8 @@ function App() {
   // --- LOGIN ---
   const handleLogin = (userData) => {
     setIsLoggedIn(true);
-    setCurrentView('challenge');
+    // ✅ Reverted to 'challenge' so users land on the main page, not the AI page
+    setCurrentView('challenge'); 
 
     if (userData) {
       setUserLevel(userData.level || 'Beginner');
@@ -40,7 +42,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen pb-10 font-sans text-gray-800">
+    <div className="min-h-screen pb-10 font-sans text-gray-100 bg-gray-50">
 
       {/* Navbar */}
       {isLoggedIn && (
@@ -58,7 +60,7 @@ function App() {
           <AuthPage onLogin={handleLogin} />
         ) : (
           <>
-            {/* CHALLENGE */}
+            {/* 1. STATIC CHALLENGES */}
             {currentView === 'challenge' && (
               <ChallengePage
                 userLevel={userLevel}
@@ -70,12 +72,22 @@ function App() {
               />
             )}
 
-            {/* HISTORY */}
+            {/* 2. AI GENERATOR (Now using User Profile Data) */}
+            {currentView === 'generator' && (
+               <ChallengeGenerator 
+                 userPreference={userPreference} // e.g. "Backend"
+                 userLevel={userLevel}           // e.g. "Intermediate"
+                 userEmail={userEmail}           // Needed to save the win
+                 setUserXP={setUserXP}           // Needed to update UI score
+               />
+            )}
+
+            {/* 3. HISTORY */}
             {currentView === 'history' && (
               <HistoryPage userEmail={userEmail} />
             )}
 
-            {/* SETTINGS */}
+            {/* 4. SETTINGS */}
             {currentView === 'settings' && (
               <SettingsPage
                 userEmail={userEmail}
@@ -84,7 +96,7 @@ function App() {
               />
             )}
 
-            {/* DASHBOARD (OPTIONAL PLACEHOLDER) */}
+            {/* 5. DASHBOARD PLACEHOLDER */}
             {currentView === 'dashboard' && (
               <div className="text-center py-20 text-gray-400">
                 Dashboard Placeholder

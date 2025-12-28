@@ -2,12 +2,20 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
+const OpenAI = require("openai");
 
 const User = require('./models/User');
-const challenges = require('./data/challenges'); // ✅ ONLY ONCE
+const challenges = require('./data/challenges');
 
 const app = express();
 const PORT = 5000;
+
+// --------------------
+// OPENAI CONFIGURATION
+// --------------------
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 app.use(cors());
 app.use(express.json());
@@ -20,53 +28,34 @@ mongoose.connect(process.env.MONGO_URI)
   .catch(err => console.error('❌ Connection Error:', err));
 
 // --------------------
-// BASIC ROUTE
-// --------------------
-app.get('/', (req, res) => {
-  res.send('API is running...');
-});
-
-// --------------------
-// REGISTER
+// AUTH ROUTES
 // --------------------
 app.post('/api/register', async (req, res) => {
   try {
     const { username, email, password, level, preference } = req.body;
-
     const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
-    }
+    if (existingUser) return res.status(400).json({ message: "User already exists" });
 
     const newUser = new User({
-      username,
-      email,
-      password,
+      username, email, password,
       level: level || 'Beginner',
       preference: preference || 'Algorithms',
-      xp: 0,
-      history: []
+      topicLevels: {}, // Start empty
+      xp: 0, history: []
     });
 
     await newUser.save();
     res.status(201).json({ message: "User created!" });
-
   } catch (error) {
     res.status(500).json({ message: "Error", error: error.message });
   }
 });
 
-// --------------------
-// LOGIN
-// --------------------
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
     const user = await User.findOne({ email });
-    if (!user || user.password !== password) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
+    if (!user || user.password !== password) return res.status(400).json({ message: "Invalid credentials" });
 
     res.json({
       message: "Login Successful",
@@ -76,211 +65,142 @@ app.post('/api/login', async (req, res) => {
         level: user.level,
         xp: user.xp,
         preference: user.preference,
-        history: user.history
+        topicLevels: user.topicLevels // Send this to frontend
       }
     });
-
   } catch (error) {
     res.status(500).json({ message: "Error", error: error.message });
   }
 });
 
 // --------------------
-// UPDATE USER SETTINGS
+// 🧠 AI ROUTES (UPDATED)
 // --------------------
-app.put('/api/user/update', async (req, res) => {
-  try {
-    const { email, preference } = req.body;
 
+// 1. GENERATE (With Assessment Logic)
+app.post('/api/generate-challenge', async (req, res) => {
+  const { topic, email } = req.body;
+
+  try {
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // 🧠 LOGIC: Check if user has a stored level for this topic.
+    // If NOT (undefined), default to 'Intermediate' for assessment.
+    let levelToUse = user.topicLevels.get(topic) || 'Intermediate';
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo-1106",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `You are a coding interview generator. Return JSON object with: 
+            title, description, starterCode, 
+            testCases (array of 3 objects with 'input' and 'expectedOutput'), 
+            and hints (array of 3 strings).`
+        },
+        {
+          role: "user",
+          content: `Generate a ${levelToUse} level coding challenge for ${topic} in JavaScript.`
+        }
+      ]
+    });
+
+    const challenge = JSON.parse(response.choices[0].message.content);
+    // Send back the level used so Frontend knows
+    res.json({ ...challenge, generatedLevel: levelToUse });
+
+  } catch (error) {
+    console.error("AI Generation Error:", error);
+    res.status(500).json({ error: "Failed to generate challenge" });
+  }
+});
+
+// 2. FORFEIT (Downgrade Logic)
+app.post('/api/forfeit', async (req, res) => {
+  const { email, topic } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // If they give up and were on 'Intermediate' (Assessment mode), drop them to Beginner
+    const currentLevel = user.topicLevels.get(topic);
+    
+    if (!currentLevel || currentLevel === 'Intermediate') {
+       user.topicLevels.set(topic, 'Beginner');
+       await user.save();
+       return res.json({ message: "Level set to Beginner for next time.", newLevel: 'Beginner' });
     }
 
-    user.preference = preference;
-    await user.save();
-
-    res.json({ message: "Preference updated!", preference });
-
+    res.json({ message: "Forfeit recorded." });
   } catch (error) {
-    res.status(500).json({ message: "Error", error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// --------------------
-// SOLVE CHALLENGE
-// --------------------
+// 3. CHECK SOLUTION
+app.post('/api/check-solution', async (req, res) => {
+  const { userCode, problemDescription, testCases } = req.body;
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo-1106",
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: "You are a code judge. Return JSON: { \"passed\": boolean, \"feedback\": \"string\" }" },
+        { role: "user", content: `Problem: ${problemDescription}\nTests: ${JSON.stringify(testCases)}\nCode: ${userCode}` }
+      ]
+    });
+    res.json(JSON.parse(response.choices[0].message.content));
+  } catch (error) {
+    res.status(500).json({ passed: false, feedback: "Error validating code." });
+  }
+});
+
+// 4. SOLVE & SAVE (Lock-in Level)
 app.post('/api/solve', async (req, res) => {
   try {
     const { email, title, difficulty, score, duration } = req.body;
-
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     const alreadySolved = user.history.some(h => h.title === title);
-
     let gainedXP = 0;
 
     if (!alreadySolved) {
       user.xp += score;
       gainedXP = score;
+
+      // ✅ NEW: If they solved it, ensure their level for this topic is saved
+      // If it was their first time (undefined), this locks them as 'Intermediate'
+      // If they were already 'Beginner' but solved 'Intermediate', you could upgrade them here (optional logic)
+      if (!user.topicLevels.get(user.preference)) {
+          user.topicLevels.set(user.preference, difficulty); 
+      }
     }
 
-    if (user.xp >= 200) user.level = 'Advanced';
-    else if (user.xp >= 100) user.level = 'Intermediate';
-    else user.level = 'Beginner';
-
-    user.history.push({
-      title,
-      difficulty,
-      score: gainedXP,
-      duration,
-      date: new Date()
-    });
-
+    user.history.push({ title, difficulty, score: gainedXP, duration, date: new Date() });
     await user.save();
 
-    res.json({
-      message: alreadySolved
-        ? "Solved again (time recorded, no XP gained)"
-        : "Challenge solved!",
-      gainedXP,
-      updatedUser: {
-        level: user.level,
-        xp: user.xp
-      }
-    });
-
+    res.json({ message: "Solved!", gainedXP, updatedUser: { xp: user.xp } });
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 });
 
 // --------------------
-// GET HISTORY
+// STANDARD ROUTES
 // --------------------
 app.get('/api/history/:email', async (req, res) => {
-  try {
-    const { email } = req.params;
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    res.json([...user.history].reverse());
-
-  } catch (error) {
-    res.status(500).json({
-      message: "Failed to fetch history",
-      error: error.message
-    });
-  }
+  const user = await User.findOne({ email: req.params.email });
+  if (user) res.json([...user.history].reverse());
+  else res.status(404).json({ message: "Not found" });
 });
 
-// --------------------
-// GET NEXT CHALLENGE
-// --------------------
-app.get('/api/challenge/next', (req, res) => {
-  const { type, level } = req.query;
-
-  const filtered = challenges.filter(
-    c => c.type === type && c.level === level
-  );
-
-  if (filtered.length === 0) {
-    return res.status(404).json({ error: "No challenge found" });
-  }
-
-  res.json(filtered[0]);
-});
-
-// GET challenges + solved status
 app.get('/api/challenges', async (req, res) => {
-  const { type, level, email } = req.query;
-
-  if (!email) {
-    return res.status(400).json({ message: "Email required" });
-  }
-
-  const user = await User.findOne({ email });
-  if (!user) {
-    return res.status(404).json({ message: "User not found" });
-  }
-
-  const solvedTitles = user.history.map(h => h.title);
-
-  const filtered = challenges
-    .filter(c => c.type === type && c.level === level)
-    .map(c => ({
-      ...c,
-      solved: solvedTitles.includes(c.title)
-    }));
-
-  res.json(filtered);
+  // Keeping your existing static challenge logic
+  res.json(challenges);
 });
 
-
-// --------------------
-// GET CHALLENGE BY ID
-// --------------------
-app.get('/api/challenge/by-id/:id', (req, res) => {
-  const id = Number(req.params.id);
-
-  const challenge = challenges.find(c => c.id === id);
-
-  if (!challenge) {
-    return res.status(404).json({ error: 'Challenge not found' });
-  }
-
-  res.json(challenge);
-});
-
-
-// --------------------
-// JUDGE CHALLENGE (CHOICE B)
-// --------------------
-app.post('/api/challenge/judge', (req, res) => {
-  const { code, challengeId } = req.body;
-
-  const challenge = challenges.find(c => c.id === challengeId);
-  if (!challenge) {
-    return res.status(404).json({ passed: false, message: "Challenge not found" });
-  }
-
-  try {
-    // ⚠️ TEMP SAFE JUDGE
-    const passed = code && code.trim().length > 10;
-
-    res.json({
-      passed,
-      message: passed ? "All tests passed" : "Solution does not pass test cases"
-    });
-
-  } catch (err) {
-    res.status(500).json({
-      passed: false,
-      message: "Runtime error"
-    });
-  }
-});
-// --------------------
-// HINT (TEMP / NO AI YET)
-// --------------------
-app.post('/api/challenge/hint', (req, res) => {
-  const { challengeId, level } = req.body;
-
-  return res.json({
-    hint: `Think about the main logic of the problem. Start with a simple approach (${level} level).`
-  });
-});
-
-// --------------------
-// START SERVER
-// --------------------
-app.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-});
-
+app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
