@@ -129,30 +129,48 @@ app.post('/api/generate-challenge', async (req, res) => {
   }
 });
 
-// 2. FORFEIT (Fail Assessment)
+// --------------------
+// 2. FORFEIT (Downgrade + Show Answer)
+// --------------------
 app.post('/api/forfeit', async (req, res) => {
-  const { email, topic } = req.body;
+  const { email, topic, problemDescription } = req.body; // ✅ Added problemDescription
 
   try {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    // 1. Downgrade Logic
     const currentLevel = user.topicLevels.get(topic);
-    
-    // If first time (Assessment), set to Beginner. No XP change.
     if (!currentLevel || currentLevel === 'Intermediate') {
        user.topicLevels.set(topic, 'Beginner');
        await user.save();
-       return res.json({ message: "Assessment Failed. Starting at Beginner (0 Bonus XP).", newLevel: 'Beginner' });
     }
 
-    res.json({ message: "Forfeit recorded." });
+    // 2. ✅ NEW: Generate the Solution Explanation
+    const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo-1106",
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "You are a helpful coding tutor. Return JSON: { \"solutionCode\": \"string\", \"explanation\": \"string\" }" },
+          { role: "user", content: `Provide the correct JavaScript solution and a brief explanation for this problem: ${problemDescription}` }
+        ]
+    });
+    
+    const solutionData = JSON.parse(response.choices[0].message.content);
+
+    res.json({ 
+        message: "Assessment Failed. Level set to Beginner.", 
+        solution: solutionData // Send the answer back
+    });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// 3. CHECK SOLUTION
+// --------------------
+// 3. CHECK SOLUTION (+ Code Review)
+// --------------------
 app.post('/api/check-solution', async (req, res) => {
   const { userCode, problemDescription, testCases } = req.body;
   try {
@@ -160,11 +178,22 @@ app.post('/api/check-solution', async (req, res) => {
       model: "gpt-3.5-turbo-1106",
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "You are a code judge. Return JSON: { \"passed\": boolean, \"feedback\": \"string\" }" },
+        { 
+            role: "system", 
+            content: `You are a code judge. Return JSON object: 
+            { 
+              "passed": boolean, 
+              "feedback": "string (short)", 
+              "betterSolution": "string (optimized code, only if passed)", 
+              "improvementTips": "string (why the better solution is better, only if passed)" 
+            }` 
+        },
         { role: "user", content: `Problem: ${problemDescription}\nTests: ${JSON.stringify(testCases)}\nCode: ${userCode}` }
       ]
     });
+    
     res.json(JSON.parse(response.choices[0].message.content));
+
   } catch (error) {
     res.status(500).json({ passed: false, feedback: "Error validating code." });
   }
