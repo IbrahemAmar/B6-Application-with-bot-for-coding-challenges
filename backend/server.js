@@ -5,7 +5,6 @@ require('dotenv').config();
 const OpenAI = require("openai");
 
 const User = require('./models/User');
-const challenges = require('./data/challenges');
 
 const app = express();
 const PORT = 5000;
@@ -40,7 +39,7 @@ app.post('/api/register', async (req, res) => {
       username, email, password,
       level: level || 'Beginner',
       preference: preference || 'Algorithms',
-      topicLevels: {}, // Start empty
+      topicLevels: {}, 
       xp: 0, history: []
     });
 
@@ -65,7 +64,7 @@ app.post('/api/login', async (req, res) => {
         level: user.level,
         xp: user.xp,
         preference: user.preference,
-        topicLevels: user.topicLevels // Send this to frontend
+        topicLevels: user.topicLevels 
       }
     });
   } catch (error) {
@@ -73,11 +72,26 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+app.put('/api/user/update', async (req, res) => {
+  try {
+    const { email, preference } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.preference = preference;
+    await user.save();
+    res.json({ message: "Preference updated!", preference });
+
+  } catch (error) {
+    res.status(500).json({ message: "Error", error: error.message });
+  }
+});
+
 // --------------------
-// 🧠 AI ROUTES (UPDATED)
+// 🧠 AI ROUTES
 // --------------------
 
-// 1. GENERATE (With Assessment Logic)
+// 1. GENERATE
 app.post('/api/generate-challenge', async (req, res) => {
   const { topic, email } = req.body;
 
@@ -85,8 +99,7 @@ app.post('/api/generate-challenge', async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // 🧠 LOGIC: Check if user has a stored level for this topic.
-    // If NOT (undefined), default to 'Intermediate' for assessment.
+    // Assessment Logic: If no history for this topic, start Intermediate
     let levelToUse = user.topicLevels.get(topic) || 'Intermediate';
 
     const response = await openai.chat.completions.create({
@@ -108,7 +121,6 @@ app.post('/api/generate-challenge', async (req, res) => {
     });
 
     const challenge = JSON.parse(response.choices[0].message.content);
-    // Send back the level used so Frontend knows
     res.json({ ...challenge, generatedLevel: levelToUse });
 
   } catch (error) {
@@ -117,7 +129,7 @@ app.post('/api/generate-challenge', async (req, res) => {
   }
 });
 
-// 2. FORFEIT (Downgrade Logic)
+// 2. FORFEIT (Fail Assessment)
 app.post('/api/forfeit', async (req, res) => {
   const { email, topic } = req.body;
 
@@ -125,13 +137,13 @@ app.post('/api/forfeit', async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // If they give up and were on 'Intermediate' (Assessment mode), drop them to Beginner
     const currentLevel = user.topicLevels.get(topic);
     
+    // If first time (Assessment), set to Beginner. No XP change.
     if (!currentLevel || currentLevel === 'Intermediate') {
        user.topicLevels.set(topic, 'Beginner');
        await user.save();
-       return res.json({ message: "Level set to Beginner for next time.", newLevel: 'Beginner' });
+       return res.json({ message: "Assessment Failed. Starting at Beginner (0 Bonus XP).", newLevel: 'Beginner' });
     }
 
     res.json({ message: "Forfeit recorded." });
@@ -158,10 +170,10 @@ app.post('/api/check-solution', async (req, res) => {
   }
 });
 
-// 4. SOLVE & SAVE (Lock-in Level)
+// 4. SOLVE & SAVE (Pass Assessment Logic)
 app.post('/api/solve', async (req, res) => {
   try {
-    const { email, title, difficulty, score, duration } = req.body;
+    const { email, title, difficulty, score, duration, topic } = req.body; // ✅ Added 'topic'
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -169,28 +181,44 @@ app.post('/api/solve', async (req, res) => {
     let gainedXP = 0;
 
     if (!alreadySolved) {
-      user.xp += score;
-      gainedXP = score;
+      
+      // 🧠 CHECK ASSESSMENT STATUS
+      const currentTopicLevel = user.topicLevels.get(topic);
 
-      // ✅ NEW: If they solved it, ensure their level for this topic is saved
-      // If it was their first time (undefined), this locks them as 'Intermediate'
-      // If they were already 'Beginner' but solved 'Intermediate', you could upgrade them here (optional logic)
-      if (!user.topicLevels.get(user.preference)) {
-          user.topicLevels.set(user.preference, difficulty); 
+      if (!currentTopicLevel) {
+          // ✅ CASE 1: First time ever for this topic (Assessment Passed!)
+          gainedXP = 100; // PLACEMENT BONUS
+          user.topicLevels.set(topic, 'Intermediate'); // Lock in Intermediate
+      } else {
+          // ✅ CASE 2: Regular Solve
+          gainedXP = score; 
       }
+
+      user.xp += gainedXP;
     }
 
+    // Level Up Check
+    if (user.xp >= 200) user.level = 'Advanced';
+    else if (user.xp >= 100) user.level = 'Intermediate';
+    else user.level = 'Beginner';
+
     user.history.push({ title, difficulty, score: gainedXP, duration, date: new Date() });
+    
     await user.save();
 
-    res.json({ message: "Solved!", gainedXP, updatedUser: { xp: user.xp } });
+    res.json({ 
+        message: "Solved!", 
+        gainedXP, 
+        updatedUser: { xp: user.xp, level: user.level } 
+    });
+
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 });
 
 // --------------------
-// STANDARD ROUTES
+// HISTORY
 // --------------------
 app.get('/api/history/:email', async (req, res) => {
   const user = await User.findOne({ email: req.params.email });
@@ -198,9 +226,7 @@ app.get('/api/history/:email', async (req, res) => {
   else res.status(404).json({ message: "Not found" });
 });
 
-app.get('/api/challenges', async (req, res) => {
-  // Keeping your existing static challenge logic
-  res.json(challenges);
-});
-
+// --------------------
+// START SERVER
+// --------------------
 app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));

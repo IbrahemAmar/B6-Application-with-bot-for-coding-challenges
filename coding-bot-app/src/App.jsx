@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import AuthPage from './pages/AuthPage';
 import HistoryPage from './pages/HistoryPage';
-import ChallengePage from './pages/ChallengePage';
 import SettingsPage from './pages/SettingsPage';
-import ChallengeGenerator from './components/ChallengeGenerator'; // ✅ Import
+import ChallengeGenerator from './components/ChallengeGenerator';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -17,11 +16,36 @@ function App() {
   const [userName, setUserName] = useState('');
   const [userPreference, setUserPreference] = useState('Algorithms');
 
+  // ✅ 1. RESTORE SESSION (Now uses sessionStorage)
+  useEffect(() => {
+    // sessionStorage clears when you close the tab!
+    const savedUser = sessionStorage.getItem('codingBotUser');
+    const savedView = sessionStorage.getItem('codingBotView'); 
+
+    if (savedUser) {
+      const userData = JSON.parse(savedUser);
+      setIsLoggedIn(true);
+      setCurrentView(savedView || 'generator'); 
+      
+      setUserLevel(userData.level);
+      setUserXP(userData.xp);
+      setUserEmail(userData.email);
+      setUserName(userData.username);
+      setUserPreference(userData.preference);
+    }
+  }, []);
+
+  // ✅ 2. SAVE VIEW (Now uses sessionStorage)
+  useEffect(() => {
+    if (isLoggedIn) {
+      sessionStorage.setItem('codingBotView', currentView);
+    }
+  }, [currentView, isLoggedIn]);
+
   // --- LOGIN ---
   const handleLogin = (userData) => {
     setIsLoggedIn(true);
-    // ✅ Reverted to 'challenge' so users land on the main page, not the AI page
-    setCurrentView('challenge'); 
+    setCurrentView('generator');
 
     if (userData) {
       setUserLevel(userData.level || 'Beginner');
@@ -29,6 +53,10 @@ function App() {
       setUserEmail(userData.email || '');
       setUserName(userData.username || '');
       setUserPreference(userData.preference || 'Algorithms');
+
+      // ✅ SAVE TO SESSION ONLY
+      sessionStorage.setItem('codingBotUser', JSON.stringify(userData));
+      sessionStorage.setItem('codingBotView', 'generator'); 
     }
   };
 
@@ -39,10 +67,14 @@ function App() {
     setUserXP(0);
     setUserEmail('');
     setUserName('');
+
+    // ✅ CLEAR SESSION
+    sessionStorage.removeItem('codingBotUser');
+    sessionStorage.removeItem('codingBotView'); 
   };
 
   return (
-    <div className="min-h-screen pb-10 font-sans text-gray-100 bg-gray-50">
+    <div className="min-h-screen pb-10 font-sans text-gray-800 bg-gray-50">
 
       {/* Navbar */}
       {isLoggedIn && (
@@ -60,47 +92,28 @@ function App() {
           <AuthPage onLogin={handleLogin} />
         ) : (
           <>
-            {/* 1. STATIC CHALLENGES */}
-            {currentView === 'challenge' && (
-              <ChallengePage
-                userLevel={userLevel}
-                userXP={userXP}
-                userEmail={userEmail}
-                userPreference={userPreference}
-                setUserXP={setUserXP}
-                setUserLevel={setUserLevel}
-              />
-            )}
-
-            {/* 2. AI GENERATOR (Now using User Profile Data) */}
+            {/* 1. AI GENERATOR */} 
             {currentView === 'generator' && (
                <ChallengeGenerator 
-                 userPreference={userPreference} // e.g. "Backend"
-                 userLevel={userLevel}           // e.g. "Intermediate"
-                 userEmail={userEmail}           // Needed to save the win
-                 setUserXP={setUserXP}           // Needed to update UI score
+                 userPreference={userPreference} 
+                 userLevel={userLevel}
+                 userEmail={userEmail} 
+                 setUserXP={setUserXP} 
                />
             )}
 
-            {/* 3. HISTORY */}
+            {/* 2. HISTORY */}
             {currentView === 'history' && (
               <HistoryPage userEmail={userEmail} />
             )}
 
-            {/* 4. SETTINGS */}
+            {/* 3. SETTINGS */}
             {currentView === 'settings' && (
               <SettingsPage
                 userEmail={userEmail}
                 userPreference={userPreference}
                 setUserPreference={setUserPreference}
               />
-            )}
-
-            {/* 5. DASHBOARD PLACEHOLDER */}
-            {currentView === 'dashboard' && (
-              <div className="text-center py-20 text-gray-400">
-                Dashboard Placeholder
-              </div>
             )}
           </>
         )}
