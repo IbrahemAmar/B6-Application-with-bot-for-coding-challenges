@@ -11,8 +11,8 @@ import PeerSessionJoin from './components/PeerSessionJoin';
 const AppShell = ({
   currentView,
   setCurrentView,
-  user,           // ✅ Now receiving the full user object
-  setUser,        // ✅ Now receiving the setter
+  user,           // ✅ Receiving full user object
+  setUser,        // ✅ Receiving setter
   selectedLanguage,
   setSelectedLanguage,
   onLogout,
@@ -21,11 +21,12 @@ const AppShell = ({
 }) => {
   const [joinModalOpen, setJoinModalOpen] = useState(false);
 
-  // Helper to calculate level/XP from the user object
+  // Helper to calculate level/XP dynamically based on the current preference
   const getTopicStats = () => {
     const topic = user?.preference || 'Algorithms';
     const entry = user?.topicProgress?.[topic];
-    const level = entry?.level || 'Initial'; // Default to Initial
+    // ✅ Logic: If entry doesn't exist yet, default to 'Initial'
+    const level = entry?.level || 'Initial'; 
     const xpMap = entry?.xp || {};
     const currentXP = xpMap[level] || 0;
     return { level, xp: currentXP };
@@ -33,7 +34,7 @@ const AppShell = ({
 
   const { level, xp } = getTopicStats();
 
-  // Helper for child components expecting the old 'setTopicProgress' prop
+  // Helper for child components expecting 'setTopicProgress'
   const handleSetTopicProgress = (updateFn) => {
     setUser((prev) => {
         const newProgress = typeof updateFn === 'function' 
@@ -58,8 +59,8 @@ const AppShell = ({
         theme={theme}
         onToggleTheme={onToggleTheme}
         onJoinSession={() => setJoinModalOpen(true)}
-        userLevel={level} // ✅ Dynamic from user state
-        userXP={xp}       // ✅ Dynamic from user state
+        userLevel={level} // ✅ Dynamic: Updates immediately when preference changes
+        userXP={xp}       // ✅ Dynamic
       />
 
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6">
@@ -68,7 +69,7 @@ const AppShell = ({
             // ✅ Pass full user & setter so 'handleForfeit' works!
             user={user} 
             setUser={setUser}
-            // Keep these for compatibility if your component uses them
+            // Keep these for compatibility
             userPreference={user?.preference}
             userEmail={user?.email}
             setTopicProgress={handleSetTopicProgress} 
@@ -79,6 +80,10 @@ const AppShell = ({
         {currentView === 'history' && <HistoryPage userEmail={user?.email} />}
         {currentView === 'settings' && (
           <SettingsPage
+            // ✅ FIX: Pass 'setUser' to Settings too. 
+            // This allows SettingsPage to update the full user state (preference + level) atomically.
+            user={user}
+            setUser={setUser}
             userEmail={user?.email}
             userPreference={user?.preference}
             setUserPreference={handleSetUserPreference}
@@ -101,7 +106,7 @@ function App() {
     return localStorage.getItem('codingBotLanguage') || 'JavaScript';
   });
 
-  // ✅ 1. UNIFIED USER STATE (Replaces separate userEmail, userName, etc.)
+  // ✅ 1. UNIFIED USER STATE
   const [user, setUser] = useState({
     username: '',
     email: '',
@@ -129,10 +134,14 @@ function App() {
     const savedView = sessionStorage.getItem('codingBotView'); 
 
     if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      setIsLoggedIn(true);
-      setCurrentView(savedView || 'generator'); 
-      setUser(parsedUser); // Restore full object
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        setIsLoggedIn(true);
+        setCurrentView(savedView || 'generator'); 
+        setUser(parsedUser); 
+      } catch (e) {
+        console.error("Failed to parse user session", e);
+      }
     }
   }, []);
 
@@ -149,7 +158,7 @@ function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  // ✅ 3. SAVE SESSION (Watches 'user' object)
+  // ✅ 3. SAVE SESSION
   useEffect(() => {
     if (isLoggedIn) {
       sessionStorage.setItem('codingBotView', currentView);
@@ -178,7 +187,7 @@ function App() {
     setCurrentView('generator');
 
     if (userData) {
-      // Ensure we have a valid structure
+      // Ensure we have a valid structure with defaults
       setUser({
           username: userData.username || '',
           email: userData.email || '',

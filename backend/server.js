@@ -12,9 +12,9 @@ const app = express();
 const PORT = 5000;
 const server = http.createServer(app);
 
-// ✅ FIX: Added 'Initial' and made it the DEFAULT_LEVEL
+// ✅ LEVELS CONFIG
 const TOPIC_LEVELS = ['Initial', 'Beginner', 'Intermediate', 'Advanced'];
-const DEFAULT_LEVEL = 'Initial'; // <--- CHANGED from 'Beginner' to 'Initial'
+const DEFAULT_LEVEL = 'Initial'; 
 const PROMOTION_THRESHOLDS = {
   Beginner: 100,
   Intermediate: 200,
@@ -42,6 +42,8 @@ const normalizeXPMap = (xp) => {
   return map;
 };
 
+// ✅ FIX 1: MODIFIED ensureTopicProgress
+// New topics MUST start at 'Initial', ignoring the user's global level.
 const ensureTopicProgress = (user, topic) => {
   if (!user.topicProgress) {
     user.topicProgress = new Map();
@@ -55,11 +57,13 @@ const ensureTopicProgress = (user, topic) => {
     return { entry: existing, updated: false };
   }
 
-  const legacyLevel = user.topicLevels?.get?.(topic) || user.level || DEFAULT_LEVEL;
+  // ✅ THE FIX: We removed "|| user.level". 
+  // If the topic doesn't exist, it defaults STRICTLY to DEFAULT_LEVEL ('Initial').
   const entry = {
-    level: TOPIC_LEVELS.includes(legacyLevel) ? legacyLevel : DEFAULT_LEVEL,
+    level: DEFAULT_LEVEL, 
     xp: createXPMap(),
   };
+  
   user.topicProgress.set(topic, entry);
   return { entry, updated: true };
 };
@@ -163,7 +167,7 @@ mongoose.connect(process.env.MONGO_URI)
 // --------------------
 app.post('/api/register', async (req, res) => {
   try {
-    const { username, email, password, level, preference } = req.body;
+    const { username, email, password, preference } = req.body;
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: "User already exists" });
 
@@ -178,8 +182,7 @@ app.post('/api/register', async (req, res) => {
 
     const newUser = new User({
       username, email, password,
-      // ✅ FIX: Use 'Initial' (DEFAULT_LEVEL) if no level provided
-      level: level || DEFAULT_LEVEL, 
+      level: DEFAULT_LEVEL, // Always 'Initial'
       preference: preferenceTopic,
       topicLevels: {},
       topicProgress,
@@ -200,11 +203,19 @@ app.post('/api/login', async (req, res) => {
     const user = await User.findOne({ email });
     if (!user || user.password !== password) return res.status(400).json({ message: "Invalid credentials" });
 
-    const preferenceTopic = user.preference || 'Algorithms';
-    const { updated } = ensureTopicProgress(user, preferenceTopic);
-    if (updated) {
-      await user.save();
+    // Auto-fix for legacy 'Beginner' users with 0 XP -> Move to Initial
+    if ((user.level === 'Beginner' || !user.level) && user.xp === 0) {
+      user.level = 'Initial';
     }
+
+    const preferenceTopic = user.preference || 'Algorithms';
+    const { entry, updated } = ensureTopicProgress(user, preferenceTopic);
+    
+    // Sync global level on login
+    user.level = entry.level;
+
+    await user.save(); // Always save on login to ensure consistency
+
     const serializedProgress = serializeTopicProgress(user.topicProgress);
     const currentEntry = serializedProgress[preferenceTopic] || {
       level: DEFAULT_LEVEL,
@@ -216,7 +227,7 @@ app.post('/api/login', async (req, res) => {
       user: {
         username: user.username,
         email: user.email,
-        level: user.level, // This will now send 'Initial' for new users
+        level: user.level, 
         xp: user.xp,
         preference: user.preference,
         topicLevels: user.topicLevels,
@@ -230,6 +241,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// ✅ FIX 2: UPDATE PREFERENCE
 app.put('/api/user/update', async (req, res) => {
   try {
     const { email, preference } = req.body;
@@ -239,20 +251,23 @@ app.put('/api/user/update', async (req, res) => {
     const preferenceTopic = preference || user.preference || 'Algorithms';
     user.preference = preferenceTopic;
 
-    ensureTopicProgress(user, preferenceTopic);
+    // 1. Ensure the topic exists (defaults to 'Initial' if new, because of Fix 1)
+    const { entry } = ensureTopicProgress(user, preferenceTopic);
+    
+    // 2. ✅ CRITICAL: Sync Global Level to the Selected Topic's Level
+    user.level = entry.level; 
+
     await user.save();
 
     const serializedProgress = serializeTopicProgress(user.topicProgress);
-    const currentEntry = serializedProgress[preferenceTopic] || {
-      level: DEFAULT_LEVEL,
-      xp: { Beginner: 0, Intermediate: 0, Advanced: 0 },
-    };
+    const currentEntry = serializedProgress[preferenceTopic];
 
     res.json({
       message: "Preference updated!",
       preference: preferenceTopic,
       topicProgress: serializedProgress,
-      currentTopicLevel: currentEntry.level,
+      // Send back the specific level for this topic so frontend updates immediately
+      currentTopicLevel: currentEntry.level, 
       currentTopicXP: currentEntry.xp[currentEntry.level] || 0,
     });
 
@@ -336,7 +351,7 @@ app.post('/api/forfeit', async (req, res) => {
 
     if (newLevel !== currentLevel) {
       entry.level = newLevel;
-      // Also update global level if this is their main topic
+      // Sync global level if this is their main topic
       if (user.preference === topic) user.level = newLevel; 
       
       user.topicProgress.set(topic, entry);
