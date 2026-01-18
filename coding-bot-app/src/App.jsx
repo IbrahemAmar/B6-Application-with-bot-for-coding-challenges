@@ -11,20 +11,42 @@ import PeerSessionJoin from './components/PeerSessionJoin';
 const AppShell = ({
   currentView,
   setCurrentView,
-  userName,
-  currentTopicLevel,
-  currentTopicXP,
-  userEmail,
-  userPreference,
-  setTopicProgress,
+  user,           // ✅ Now receiving the full user object
+  setUser,        // ✅ Now receiving the setter
   selectedLanguage,
   setSelectedLanguage,
-  setUserPreference,
   onLogout,
   theme,
   onToggleTheme,
 }) => {
   const [joinModalOpen, setJoinModalOpen] = useState(false);
+
+  // Helper to calculate level/XP from the user object
+  const getTopicStats = () => {
+    const topic = user?.preference || 'Algorithms';
+    const entry = user?.topicProgress?.[topic];
+    const level = entry?.level || 'Initial'; // Default to Initial
+    const xpMap = entry?.xp || {};
+    const currentXP = xpMap[level] || 0;
+    return { level, xp: currentXP };
+  };
+
+  const { level, xp } = getTopicStats();
+
+  // Helper for child components expecting the old 'setTopicProgress' prop
+  const handleSetTopicProgress = (updateFn) => {
+    setUser((prev) => {
+        const newProgress = typeof updateFn === 'function' 
+            ? updateFn(prev.topicProgress || {}) 
+            : updateFn;
+        return { ...prev, topicProgress: newProgress };
+    });
+  };
+
+  // Helper for child components expecting 'setUserPreference'
+  const handleSetUserPreference = (newPref) => {
+      setUser(prev => ({ ...prev, preference: newPref }));
+  };
 
   return (
     <>
@@ -32,31 +54,35 @@ const AppShell = ({
         currentView={currentView}
         setView={setCurrentView}
         onLogout={onLogout}
-        userName={userName}
+        userName={user?.username || ''}
         theme={theme}
         onToggleTheme={onToggleTheme}
         onJoinSession={() => setJoinModalOpen(true)}
-        userLevel={currentTopicLevel}
-        userXP={currentTopicXP}
+        userLevel={level} // ✅ Dynamic from user state
+        userXP={xp}       // ✅ Dynamic from user state
       />
 
       <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6">
         {currentView === 'generator' && (
           <ChallengeGenerator
-            userPreference={userPreference}
-            userEmail={userEmail}
-            setTopicProgress={setTopicProgress}
+            // ✅ Pass full user & setter so 'handleForfeit' works!
+            user={user} 
+            setUser={setUser}
+            // Keep these for compatibility if your component uses them
+            userPreference={user?.preference}
+            userEmail={user?.email}
+            setTopicProgress={handleSetTopicProgress} 
             selectedLanguage={selectedLanguage}
             setSelectedLanguage={setSelectedLanguage}
           />
         )}
-        {currentView === 'history' && <HistoryPage userEmail={userEmail} />}
+        {currentView === 'history' && <HistoryPage userEmail={user?.email} />}
         {currentView === 'settings' && (
           <SettingsPage
-            userEmail={userEmail}
-            userPreference={userPreference}
-            setUserPreference={setUserPreference}
-            setTopicProgress={setTopicProgress}
+            userEmail={user?.email}
+            userPreference={user?.preference}
+            setUserPreference={handleSetUserPreference}
+            setTopicProgress={handleSetTopicProgress}
           />
         )}
       </main>
@@ -75,11 +101,16 @@ function App() {
     return localStorage.getItem('codingBotLanguage') || 'JavaScript';
   });
 
-  // --- User State ---
-  const [userEmail, setUserEmail] = useState('');
-  const [userName, setUserName] = useState('');
-  const [userPreference, setUserPreference] = useState('Algorithms');
-  const [topicProgress, setTopicProgress] = useState({});
+  // ✅ 1. UNIFIED USER STATE (Replaces separate userEmail, userName, etc.)
+  const [user, setUser] = useState({
+    username: '',
+    email: '',
+    preference: 'Algorithms',
+    topicProgress: {},
+    level: 'Initial', 
+    xp: 0
+  });
+
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem('codebotTheme');
     if (savedTheme === 'dark' || savedTheme === 'light') {
@@ -92,25 +123,20 @@ function App() {
     return savedTheme === 'dark' || savedTheme === 'light';
   });
 
-  // ✅ 1. RESTORE SESSION (Now uses sessionStorage)
+  // ✅ 2. RESTORE SESSION
   useEffect(() => {
-    // sessionStorage clears when you close the tab!
     const savedUser = sessionStorage.getItem('codingBotUser');
     const savedView = sessionStorage.getItem('codingBotView'); 
 
     if (savedUser) {
-      const userData = JSON.parse(savedUser);
+      const parsedUser = JSON.parse(savedUser);
       setIsLoggedIn(true);
       setCurrentView(savedView || 'generator'); 
-      
-      setUserEmail(userData.email);
-      setUserName(userData.username);
-      setUserPreference(userData.preference);
-      setTopicProgress(userData.topicProgress || {});
+      setUser(parsedUser); // Restore full object
     }
   }, []);
 
-  // ✅ Theme setup (default to system unless saved)
+  // Theme Logic
   useEffect(() => {
     if (hasSavedTheme) return;
     const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -123,7 +149,7 @@ function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  // ✅ 2. SAVE VIEW (Now uses sessionStorage)
+  // ✅ 3. SAVE SESSION (Watches 'user' object)
   useEffect(() => {
     if (isLoggedIn) {
       sessionStorage.setItem('codingBotView', currentView);
@@ -132,14 +158,8 @@ function App() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    const storedUser = {
-      username: userName,
-      email: userEmail,
-      preference: userPreference,
-      topicProgress,
-    };
-    sessionStorage.setItem('codingBotUser', JSON.stringify(storedUser));
-  }, [isLoggedIn, userName, userEmail, userPreference, topicProgress]);
+    sessionStorage.setItem('codingBotUser', JSON.stringify(user));
+  }, [isLoggedIn, user]);
 
   useEffect(() => {
     localStorage.setItem('codingBotLanguage', selectedLanguage);
@@ -158,12 +178,16 @@ function App() {
     setCurrentView('generator');
 
     if (userData) {
-      setUserEmail(userData.email || '');
-      setUserName(userData.username || '');
-      setUserPreference(userData.preference || 'Algorithms');
-      setTopicProgress(userData.topicProgress || {});
+      // Ensure we have a valid structure
+      setUser({
+          username: userData.username || '',
+          email: userData.email || '',
+          preference: userData.preference || 'Algorithms',
+          topicProgress: userData.topicProgress || {},
+          level: userData.level || 'Initial',
+          xp: userData.xp || 0
+      });
 
-      // ✅ SAVE TO SESSION ONLY
       sessionStorage.setItem('codingBotUser', JSON.stringify(userData));
       sessionStorage.setItem('codingBotView', 'generator'); 
     }
@@ -174,11 +198,8 @@ function App() {
   const handleLogout = () => {
     setIsLoggedIn(false);
     setCurrentView('generator');
-    setUserEmail('');
-    setUserName('');
-    setTopicProgress({});
+    setUser({ username: '', email: '', preference: 'Algorithms', topicProgress: {} });
 
-    // ✅ CLEAR SESSION
     sessionStorage.removeItem('codingBotUser');
     sessionStorage.removeItem('codingBotView'); 
     navigate('/signin');
@@ -190,32 +211,6 @@ function App() {
     localStorage.setItem('codebotTheme', nextTheme);
     setHasSavedTheme(true);
   };
-
-  const getTopicEntry = (progress, topic) => {
-    const entry = progress?.[topic];
-    const xp = entry?.xp || {};
-    return {
-      level: entry?.level || 'Beginner',
-      xp: {
-        Beginner: Number.isFinite(xp.Beginner) ? xp.Beginner : 0,
-        Intermediate: Number.isFinite(xp.Intermediate) ? xp.Intermediate : 0,
-        Advanced: Number.isFinite(xp.Advanced) ? xp.Advanced : 0,
-      },
-    };
-  };
-
-  useEffect(() => {
-    if (!userPreference) return;
-    setTopicProgress((prev) => {
-      if (prev?.[userPreference]) return prev;
-      const nextEntry = getTopicEntry({}, userPreference);
-      return { ...prev, [userPreference]: nextEntry };
-    });
-  }, [userPreference]);
-
-  const currentTopicEntry = getTopicEntry(topicProgress, userPreference);
-  const currentTopicLevel = currentTopicEntry.level;
-  const currentTopicXP = currentTopicEntry.xp[currentTopicLevel] || 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 font-sans text-gray-900 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:text-gray-100">
@@ -257,15 +252,11 @@ function App() {
               <AppShell
                 currentView={currentView}
                 setCurrentView={setCurrentView}
-                userName={userName}
-                currentTopicLevel={currentTopicLevel}
-                currentTopicXP={currentTopicXP}
-                userEmail={userEmail}
-                userPreference={userPreference}
-                setTopicProgress={setTopicProgress}
+                // ✅ Passing the unified user state
+                user={user}
+                setUser={setUser}
                 selectedLanguage={selectedLanguage}
                 setSelectedLanguage={setSelectedLanguage}
-                setUserPreference={setUserPreference}
                 onLogout={handleLogout}
                 theme={theme}
                 onToggleTheme={handleToggleTheme}

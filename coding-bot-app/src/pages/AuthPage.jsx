@@ -43,6 +43,7 @@ const AuthPage = ({ mode = 'signin', onLogin, theme, onToggleTheme }) => {
   // --- REGISTER LOGIC ---
   const handleRegister = async () => {
     try {
+      // ✅ FIX 1: removed 'level' from body. The backend now defaults to 'Initial' automatically.
       const response = await fetch('http://localhost:5000/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -50,7 +51,6 @@ const AuthPage = ({ mode = 'signin', onLogin, theme, onToggleTheme }) => {
           username: formData.username,
           email: formData.email,
           password: formData.password,
-          level: 'Beginner', // <--- AUTOMATICALLY SET TO BEGINNER
           preference: selectedPreference 
         }),
       });
@@ -59,14 +59,16 @@ const AuthPage = ({ mode = 'signin', onLogin, theme, onToggleTheme }) => {
 
       if (response.ok) {
         alert("🎉 Registration Successful! Logging you in...");
-        // Auto-login with default Beginner stats
+        
+        // ✅ FIX 2: Manually set local state to 'Initial' so UI updates immediately
         onLogin({ 
             username: formData.username,
             email: formData.email,
             preference: selectedPreference,
+            level: 'Initial', // <--- IMPORTANT: Starts at Initial for global level
             topicProgress: {
               [selectedPreference]: {
-                level: 'Beginner',
+                level: 'Initial', // <--- IMPORTANT: Starts at Initial for topic level
                 xp: { Beginner: 0, Intermediate: 0, Advanced: 0 },
               },
             },

@@ -12,8 +12,9 @@ const app = express();
 const PORT = 5000;
 const server = http.createServer(app);
 
-const TOPIC_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
-const DEFAULT_LEVEL = 'Beginner';
+// ✅ FIX: Added 'Initial' and made it the DEFAULT_LEVEL
+const TOPIC_LEVELS = ['Initial', 'Beginner', 'Intermediate', 'Advanced'];
+const DEFAULT_LEVEL = 'Initial'; // <--- CHANGED from 'Beginner' to 'Initial'
 const PROMOTION_THRESHOLDS = {
   Beginner: 100,
   Intermediate: 200,
@@ -85,8 +86,6 @@ app.use(express.json());
 // --------------------
 // SIGNALING SERVER (WebRTC)
 // --------------------
-// IMPORTANT: This channel is for SDP/ICE signaling and room presence ONLY.
-// Do NOT send challenge content, solution code, or feedback here.
 const wss = new WebSocketServer({ server });
 const rooms = new Map();
 
@@ -169,19 +168,23 @@ app.post('/api/register', async (req, res) => {
     if (existingUser) return res.status(400).json({ message: "User already exists" });
 
     const preferenceTopic = preference || 'Algorithms';
+    
+    // Create topic progress starting at 'Initial'
     const topicProgress = new Map();
     topicProgress.set(preferenceTopic, {
-      level: DEFAULT_LEVEL,
+      level: 'Initial', 
       xp: createXPMap(),
     });
 
     const newUser = new User({
       username, email, password,
-      level: level || DEFAULT_LEVEL,
+      // ✅ FIX: Use 'Initial' (DEFAULT_LEVEL) if no level provided
+      level: level || DEFAULT_LEVEL, 
       preference: preferenceTopic,
       topicLevels: {},
       topicProgress,
-      xp: 0, history: []
+      xp: 0, 
+      history: []
     });
 
     await newUser.save();
@@ -213,7 +216,7 @@ app.post('/api/login', async (req, res) => {
       user: {
         username: user.username,
         email: user.email,
-        level: user.level,
+        level: user.level, // This will now send 'Initial' for new users
         xp: user.xp,
         preference: user.preference,
         topicLevels: user.topicLevels,
@@ -275,8 +278,11 @@ app.post('/api/generate-challenge', async (req, res) => {
       await user.save();
     }
 
-    // Assessment Logic: Track level per topic
-    const levelToUse = entry.level || DEFAULT_LEVEL;
+    // Logic: If 'Initial', give 'Intermediate' to test them
+    let levelToUse = entry.level || DEFAULT_LEVEL;
+    if (levelToUse === 'Initial') {
+      levelToUse = 'Intermediate';
+    }
 
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo-1106",
@@ -306,37 +312,59 @@ app.post('/api/generate-challenge', async (req, res) => {
 });
 
 // --------------------
-// 2. FORFEIT (Downgrade + Show Answer)
+// 2. FORFEIT (Placement Fail / Downgrade)
 // --------------------
 app.post('/api/forfeit', async (req, res) => {
-  const { email, topic, problemDescription, language = 'JavaScript' } = req.body; // ✅ Added problemDescription
+  const { email, topic, problemDescription, language = 'JavaScript' } = req.body;
 
   try {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // 1. Downgrade Logic
-    const currentLevel = user.topicLevels.get(topic);
-    if (!currentLevel || currentLevel === 'Intermediate') {
-       user.topicLevels.set(topic, 'Beginner');
-       await user.save();
+    const { entry } = ensureTopicProgress(user, topic);
+    let currentLevel = entry.level || DEFAULT_LEVEL;
+    let newLevel = currentLevel;
+
+    // Logic for forfeit
+    if (currentLevel === 'Initial') {
+      newLevel = 'Beginner';
+    } else if (currentLevel === 'Advanced') {
+      newLevel = 'Intermediate';
+    } else if (currentLevel === 'Intermediate') {
+      newLevel = 'Beginner';
     }
 
-    // 2. ✅ NEW: Generate the Solution Explanation
+    if (newLevel !== currentLevel) {
+      entry.level = newLevel;
+      // Also update global level if this is their main topic
+      if (user.preference === topic) user.level = newLevel; 
+      
+      user.topicProgress.set(topic, entry);
+      await user.save();
+    }
+
     const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo-1106",
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: "You are a helpful coding tutor. Return JSON: { \"solutionCode\": \"string\", \"explanation\": \"string\" }" },
-          { role: "user", content: `Provide the correct ${language} solution and a brief explanation for this problem: ${problemDescription}` }
-        ]
+      model: "gpt-3.5-turbo-1106",
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: "You are a helpful coding tutor. Return JSON: { \"solutionCode\": \"string\", \"explanation\": \"string\" }" },
+        { role: "user", content: `Provide the correct ${language} solution and a brief explanation for this problem: ${problemDescription}` }
+      ]
     });
     
     const solutionData = JSON.parse(response.choices[0].message.content);
 
+    const serializedProgress = serializeTopicProgress(user.topicProgress);
+    const currentEntry = serializedProgress[topic];
+
     res.json({ 
-        message: "Assessment Failed. Level set to Beginner.", 
-        solution: solutionData // Send the answer back
+        message: `Assessment Failed. Level set to ${newLevel}.`, 
+        solution: solutionData,
+        updatedUser: {
+          topicProgress: serializedProgress,
+          currentTopicLevel: currentEntry.level,
+          currentTopicXP: currentEntry.xp[currentEntry.level] || 0,
+        }
     });
 
   } catch (error) {
@@ -345,7 +373,7 @@ app.post('/api/forfeit', async (req, res) => {
 });
 
 // --------------------
-// 3. CHECK SOLUTION (+ Code Review)
+// 3. CHECK SOLUTION
 // --------------------
 app.post('/api/check-solution', async (req, res) => {
   const { userCode, problemDescription, testCases, language = 'JavaScript' } = req.body;
@@ -375,16 +403,15 @@ app.post('/api/check-solution', async (req, res) => {
   }
 });
 
-// 4. SOLVE & SAVE (Pass Assessment Logic)
+// 4. SOLVE & SAVE (Placement Success / Promotion)
 app.post('/api/solve', async (req, res) => {
   try {
-    const { email, title, difficulty, score, duration, topic, challengeId, language } = req.body; // ✅ Added 'topic'
+    const { email, title, difficulty, score, duration, topic, challengeId, language } = req.body;
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const { entry } = ensureTopicProgress(user, topic);
 
-    // Prefer a stable challengeId to avoid duplicate XP on repeated submits.
     const alreadySolved = challengeId
       ? user.history.some(h => h.challengeId === challengeId)
       : user.history.some(h => h.title === title);
@@ -394,14 +421,29 @@ app.post('/api/solve', async (req, res) => {
       gainedXP = score;
 
       const currentLevel = entry.level || DEFAULT_LEVEL;
-      const currentXP = entry.xp.get(currentLevel) || 0;
-      const updatedXP = currentXP + gainedXP;
-      entry.xp.set(currentLevel, updatedXP);
 
-      if (currentLevel === 'Beginner' && updatedXP >= PROMOTION_THRESHOLDS.Beginner) {
+      // Placement Logic
+      if (currentLevel === 'Initial') {
         entry.level = 'Intermediate';
-      } else if (currentLevel === 'Intermediate' && updatedXP >= PROMOTION_THRESHOLDS.Intermediate) {
-        entry.level = 'Advanced';
+        entry.xp.set('Intermediate', 100); 
+        // Update global level if this is the preference
+        if (user.preference === topic) user.level = 'Intermediate';
+      } else {
+        const currentXP = entry.xp.get(currentLevel) || 0;
+        const updatedXP = currentXP + gainedXP;
+        entry.xp.set(currentLevel, updatedXP);
+
+        let newLevel = currentLevel;
+        if (currentLevel === 'Beginner' && updatedXP >= PROMOTION_THRESHOLDS.Beginner) {
+          newLevel = 'Intermediate';
+        } else if (currentLevel === 'Intermediate' && updatedXP >= PROMOTION_THRESHOLDS.Intermediate) {
+          newLevel = 'Advanced';
+        }
+
+        if (newLevel !== currentLevel) {
+          entry.level = newLevel;
+          if (user.preference === topic) user.level = newLevel;
+        }
       }
 
       user.topicProgress.set(topic, entry);

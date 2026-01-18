@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import PeerSessionHost from './PeerSessionHost';
 
 const ChallengeGenerator = ({
+  user,             // ✅ NEW: Receive full user object
+  setUser,          // ✅ NEW: Receive setter to update Navbar
   userPreference,
   userEmail,
   setTopicProgress,
@@ -21,8 +23,8 @@ const ChallengeGenerator = ({
   const [hintsRevealed, setHintsRevealed] = useState(0); 
   
   // ✅ NEW STATES
-  const [forfeitData, setForfeitData] = useState(null); // Stores solution when giving up
-  const [successData, setSuccessData] = useState(null); // Stores improved code when winning
+  const [forfeitData, setForfeitData] = useState(null); 
+  const [successData, setSuccessData] = useState(null); 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [finalSolveTime, setFinalSolveTime] = useState(0);
   const [submittedCode, setSubmittedCode] = useState('');
@@ -144,6 +146,18 @@ const ChallengeGenerator = ({
         // Show the answer
         setForfeitData(data.solution);
         setTimerActive(false);
+
+        // ✅ CRITICAL FIX: Update the UI immediately using the backend response
+        // Note: We check if setUser exists before calling it
+        if (data.updatedUser && setUser) {
+             setUser(prev => ({
+                 ...prev,
+                 level: data.updatedUser.currentTopicLevel, 
+                 xp: data.updatedUser.currentTopicXP,      
+                 topicProgress: data.updatedUser.topicProgress 
+             }));
+        }
+
         alert("Assessment Failed. See solution below.");
         
     } catch (err) { console.error(err); }
@@ -202,6 +216,18 @@ const ChallengeGenerator = ({
         });
         
         const solveData = await solveRes.json();
+        
+        // ✅ UPDATE NAVBAR ON SUCCESS TOO
+        if (solveData.updatedUser && setUser) {
+             setUser(prev => ({
+                 ...prev,
+                 level: solveData.updatedUser.currentTopicLevel,
+                 xp: solveData.updatedUser.currentTopicXP,
+                 topicProgress: solveData.updatedUser.topicProgress
+             }));
+        }
+
+        // Keep this for backward compatibility if needed
         if (solveData.updatedUser?.topicProgress) {
           setTopicProgress(solveData.updatedUser.topicProgress);
         }
