@@ -1,5 +1,18 @@
 const mongoose = require('mongoose');
 
+const TopicProgressSchema = new mongoose.Schema({
+  level: { type: String, default: 'Beginner' },
+  xp: {
+    type: Map,
+    of: Number,
+    default: {
+      Beginner: 0,
+      Intermediate: 0,
+      Advanced: 0,
+    },
+  },
+}, { _id: false });
+
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -17,12 +30,21 @@ const UserSchema = new mongoose.Schema({
     default: {}
   },
 
+  // ✅ Track level + XP per topic
+  topicProgress: {
+    type: Map,
+    of: TopicProgressSchema,
+    default: {}
+  },
+
   history: [
     {
       title: String,
       difficulty: String,
       score: Number,
       duration: Number,
+      language: String,
+      challengeId: String,
       date: Date
     }
   ]

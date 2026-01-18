@@ -2,7 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --app-bg: #f8fafc;
+  --app-text: #1f2937;
+}
+
+.dark {
+  --app-bg: #0f172a;
+  --app-text: #e5e7eb;
+}
+
 body {
-  background-color: #f8fafc; /* Matches the light gray background */
+  background-color: var(--app-bg); /* Matches theme background */
+  color: var(--app-text);
   font-family: 'Inter', sans-serif;
 }

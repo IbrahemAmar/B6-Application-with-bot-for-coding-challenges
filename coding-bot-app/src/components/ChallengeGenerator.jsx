@@ -1,9 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import PeerSessionHost from './PeerSessionHost';
 
-const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
+const ChallengeGenerator = ({
+  userPreference,
+  userEmail,
+  setTopicProgress,
+  selectedLanguage,
+  setSelectedLanguage,
+}) => {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [startTime, setStartTime] = useState(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [timerActive, setTimerActive] = useState(false);
   
   const [challenge, setChallenge] = useState(null);
   const [generatedLevel, setGeneratedLevel] = useState('');
@@ -14,6 +23,58 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
   // ✅ NEW STATES
   const [forfeitData, setForfeitData] = useState(null); // Stores solution when giving up
   const [successData, setSuccessData] = useState(null); // Stores improved code when winning
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [finalSolveTime, setFinalSolveTime] = useState(0);
+  const [submittedCode, setSubmittedCode] = useState('');
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [challengeId, setChallengeId] = useState('');
+  const timerRef = useRef(null);
+
+  const languageOptions = ['JavaScript', 'Python', 'Java'];
+
+  const getFallbackStarter = (language) => {
+    switch (language) {
+      case 'Python':
+        return '# Write your code here...';
+      case 'Java':
+        return '// Write your code here...';
+      default:
+        return '// Write your code here...';
+    }
+  };
+
+  const buildChallengeId = (challengeData, language) => {
+    const payload = JSON.stringify({
+      title: challengeData?.title || '',
+      description: challengeData?.description || '',
+      testCases: challengeData?.testCases || [],
+      topic: userPreference,
+      language,
+    });
+
+    let hash = 5381;
+    for (let i = 0; i < payload.length; i += 1) {
+      hash = (hash * 33) ^ payload.charCodeAt(i);
+    }
+    return `ch-${(hash >>> 0).toString(16)}`;
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    if (!timerActive || !startTime) return;
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [timerActive, startTime]);
 
   // --- 1. GENERATE ---
   const handleGenerate = async () => {
@@ -22,6 +83,11 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
     setFeedback(null);
     setForfeitData(null); // Reset
     setSuccessData(null); // Reset
+    setShowSuccessModal(false);
+    setShowShareModal(false);
+    setFinalSolveTime(0);
+    setSubmittedCode('');
+    setChallengeId('');
     setGeneratedLevel('');
     setHintsRevealed(0); 
     
@@ -29,15 +95,22 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
       const res = await fetch('http://localhost:5000/api/generate-challenge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: userPreference, email: userEmail }),
+        body: JSON.stringify({
+          topic: userPreference,
+          email: userEmail,
+          language: selectedLanguage,
+        }),
       });
       const data = await res.json();
       if (data.error) { alert(data.error); return; }
 
       setChallenge(data);
       setGeneratedLevel(data.generatedLevel);
-      setUserCode(data.starterCode || '// Write your code here...');
+      setUserCode(data.starterCode || getFallbackStarter(selectedLanguage));
+      setChallengeId(buildChallengeId(data, selectedLanguage));
       setStartTime(Date.now()); 
+      setElapsedSeconds(0);
+      setTimerActive(true);
 
     } catch (err) { console.error(err); alert("Failed to generate."); }
     setLoading(false);
@@ -62,13 +135,15 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
             body: JSON.stringify({ 
                 email: userEmail, 
                 topic: userPreference,
-                problemDescription: challenge.description // ✅ Send Desc to get answer
+                problemDescription: challenge.description,
+                language: selectedLanguage,
             }),
         });
         const data = await res.json();
         
         // Show the answer
         setForfeitData(data.solution);
+        setTimerActive(false);
         alert("Assessment Failed. See solution below.");
         
     } catch (err) { console.error(err); }
@@ -88,7 +163,8 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
         body: JSON.stringify({
           userCode,
           problemDescription: challenge.description,
-          testCases: challenge.testCases
+          testCases: challenge.testCases,
+          language: selectedLanguage,
         }),
       });
       const result = await res.json();
@@ -102,6 +178,10 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
         });
 
         const timeTaken = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+        setFinalSolveTime(timeTaken);
+        setTimerActive(false);
+        setShowSuccessModal(true);
+        setSubmittedCode(userCode);
         let points = generatedLevel === 'Beginner' ? 10 : generatedLevel === 'Intermediate' ? 20 : 30;
         const penalty = hintsRevealed * 5;
         points = Math.max(0, points - penalty); 
@@ -115,12 +195,16 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
             difficulty: generatedLevel,
             score: points,
             duration: timeTaken,
-            topic: userPreference 
+            topic: userPreference,
+            language: selectedLanguage,
+            challengeId: challengeId || buildChallengeId(challenge, selectedLanguage),
           }),
         });
         
         const solveData = await solveRes.json();
-        setUserXP(solveData.updatedUser.xp);
+        if (solveData.updatedUser?.topicProgress) {
+          setTopicProgress(solveData.updatedUser.topicProgress);
+        }
       }
 
     } catch (err) { console.error(err); }
@@ -128,14 +212,35 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white shadow-lg rounded-xl mt-10">
+    <div className="mx-auto max-w-4xl rounded-3xl border border-gray-200 bg-white/90 p-8 shadow-xl dark:border-gray-800 dark:bg-gray-900/80">
       <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">AI Assessment</h1>
-        <p className="text-gray-500 mt-2">Topic: <strong className="text-blue-600">{userPreference}</strong></p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">AI Assessment</h1>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          Topic: <strong className="text-blue-600 dark:text-blue-400">{userPreference}</strong>
+        </p>
       </div>
 
-      <div className="flex justify-center mb-8">
-        <button onClick={handleGenerate} disabled={loading} className="px-8 py-3 bg-blue-600 text-white font-bold rounded-full shadow hover:bg-blue-700">
+      <div className="mb-8 flex flex-wrap items-center justify-center gap-4">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Language</span>
+          <select
+            value={selectedLanguage}
+            onChange={(event) => setSelectedLanguage(event.target.value)}
+            disabled={Boolean(challenge && !feedback?.passed && !forfeitData)}
+            className="rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+          >
+            {languageOptions.map((language) => (
+              <option key={language} value={language}>
+                {language}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          onClick={handleGenerate}
+          disabled={loading}
+          className="rounded-full bg-blue-600 px-8 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-blue-700 disabled:opacity-60"
+        >
           {loading ? 'Thinking...' : 'Start Assessment / Next Question'}
         </button>
       </div>
@@ -143,24 +248,45 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
       {challenge && (
         <div className="animate-fade-in">
           {/* Header */}
-          <div className="flex justify-between items-start bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-r">
-             <div>
-                <h2 className="text-2xl font-bold text-gray-900">{challenge.title}</h2>
-                <span className={`px-2 py-0.5 rounded text-xs text-white font-bold ${generatedLevel === 'Beginner' ? 'bg-green-500' : generatedLevel === 'Intermediate' ? 'bg-yellow-500' : 'bg-red-500'}`}>{generatedLevel}</span>
-             </div>
-             
-             {!feedback?.passed && !forfeitData && (
-                <button onClick={handleForfeit} className="text-red-500 text-sm font-bold underline">I don't know (Give Up)</button>
-             )}
+          <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50/80 p-5 dark:border-blue-900/40 dark:bg-blue-900/20">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{challenge.title}</h2>
+                <span
+                  className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold text-white ${
+                    generatedLevel === 'Beginner'
+                      ? 'bg-green-500'
+                      : generatedLevel === 'Intermediate'
+                        ? 'bg-yellow-500'
+                        : 'bg-red-500'
+                  }`}
+                >
+                  {generatedLevel}
+                </span>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                {!feedback?.passed && !forfeitData && (
+                  <button onClick={handleForfeit} className="text-sm font-semibold text-red-500 underline">
+                    I don't know (Give Up)
+                  </button>
+                )}
+                <div className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+                  Timer: <span className="font-mono">{formatTime(elapsedSeconds)}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <p className="text-gray-700 mb-6">{challenge.description}</p>
+          <p className="mb-6 text-gray-700 dark:text-gray-300">{challenge.description}</p>
+          <div className="mb-3 text-xs font-semibold text-gray-500 dark:text-gray-400">
+            Editor language: <span className="text-gray-700 dark:text-gray-200">{selectedLanguage}</span>
+          </div>
 
           {/* Code Editor */}
           <textarea
             value={userCode}
             onChange={(e) => setUserCode(e.target.value)}
-            className="w-full h-80 p-4 font-mono text-sm bg-gray-900 text-white rounded-lg mb-4"
+            className="mb-4 h-80 w-full rounded-2xl bg-gray-900 p-4 font-mono text-sm text-white shadow-inner"
             spellCheck="false"
             disabled={feedback?.passed || forfeitData} // Lock if done
           />
@@ -168,23 +294,31 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
           {/* Controls */}
           {!feedback?.passed && !forfeitData && (
             <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                    <button onClick={handleRevealHint} disabled={hintsRevealed >= challenge.hints.length} className="text-sm font-bold px-3 py-1 rounded border bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border-yellow-300">
-                        💡 Reveal Hint (-5 XP)
-                    </button>
-                    <span className="text-xs text-gray-500">{hintsRevealed} Used</span>
-                </div>
-                <button onClick={handleCheck} disabled={checking} className="px-8 py-3 bg-purple-600 text-white font-bold rounded hover:bg-purple-700">
-                  {checking ? 'Judging...' : 'Submit & Check'}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRevealHint}
+                  disabled={hintsRevealed >= challenge.hints.length}
+                  className="rounded-full border border-yellow-300 bg-yellow-100 px-4 py-2 text-xs font-semibold text-yellow-700 hover:bg-yellow-200 disabled:opacity-60"
+                >
+                  💡 Reveal Hint (-5 XP)
                 </button>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{hintsRevealed} Used</span>
+              </div>
+              <button
+                onClick={handleCheck}
+                disabled={checking}
+                className="rounded-full bg-purple-600 px-8 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-purple-700 disabled:opacity-60"
+              >
+                {checking ? 'Judging...' : 'Submit & Check'}
+              </button>
             </div>
           )}
 
           {/* Hints Display */}
           {hintsRevealed > 0 && (
-             <div className="mt-4 bg-yellow-50 p-4 rounded border border-yellow-200">
-                <h4 className="font-bold text-yellow-800 text-sm mb-2">Revealed Hints:</h4>
-                <ul className="list-disc pl-5 text-sm text-gray-700">
+             <div className="mt-4 rounded-2xl border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-700/50 dark:bg-yellow-900/20">
+                <h4 className="mb-2 text-sm font-bold text-yellow-800 dark:text-yellow-200">Revealed Hints:</h4>
+                <ul className="list-disc pl-5 text-sm text-gray-700 dark:text-gray-300">
                     {challenge.hints.slice(0, hintsRevealed).map((h, i) => <li key={i}>{h}</li>)}
                 </ul>
              </div>
@@ -193,16 +327,16 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
           {/* ✅ 1. SUCCESS FEEDBACK (+ Better Code) */}
           {feedback && feedback.passed && (
             <div className="mt-6 animate-fade-in">
-                <div className="p-4 rounded-lg bg-green-100 border-l-4 border-green-500 text-green-900 mb-4">
-                    <h3 className="font-bold text-lg">✅ Passed! (+XP)</h3>
+                <div className="mb-4 rounded-2xl border border-green-200 bg-green-100 p-4 text-green-900 dark:border-green-700/40 dark:bg-green-900/20 dark:text-green-200">
+                    <h3 className="text-lg font-bold">✅ Passed! (+XP)</h3>
                     <p>{feedback.feedback}</p>
                 </div>
 
                 {successData && (
-                    <div className="bg-gray-800 rounded-lg p-6 text-white border border-gray-700">
+                    <div className="rounded-2xl border border-gray-700 bg-gray-900 p-6 text-white shadow-lg">
                         <h4 className="text-yellow-400 font-bold text-lg mb-2">🤖 AI Code Review:</h4>
                         <p className="text-gray-300 mb-4 text-sm">{successData.tips}</p>
-                        <div className="bg-black p-4 rounded text-sm font-mono overflow-x-auto border border-gray-600">
+                        <div className="rounded-xl border border-gray-600 bg-black p-4 text-sm font-mono">
                             <pre>{successData.betterSolution}</pre>
                         </div>
                     </div>
@@ -212,7 +346,7 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
 
           {/* ❌ 2. FAIL FEEDBACK */}
           {feedback && !feedback.passed && (
-            <div className="mt-6 p-4 rounded border-l-4 bg-red-100 border-red-500 text-red-900">
+            <div className="mt-6 rounded-2xl border border-red-200 bg-red-100 p-4 text-red-900 dark:border-red-700/40 dark:bg-red-900/20 dark:text-red-200">
               <strong>❌ Failed</strong>
               <p>{feedback.feedback}</p>
             </div>
@@ -221,11 +355,11 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
           {/* 🏳️ 3. FORFEIT / GIVE UP SOLUTION */}
           {forfeitData && (
              <div className="mt-8 animate-fade-in">
-                <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded">
-                    <h3 className="font-bold text-red-800 text-xl mb-2">Better Luck Next Time!</h3>
-                    <p className="text-gray-700 mb-4">{forfeitData.explanation}</p>
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-6 dark:border-red-800/40 dark:bg-red-900/10">
+                    <h3 className="mb-2 text-xl font-bold text-red-800 dark:text-red-200">Better Luck Next Time!</h3>
+                    <p className="mb-4 text-gray-700 dark:text-gray-300">{forfeitData.explanation}</p>
                     
-                    <div className="bg-gray-900 text-white p-4 rounded-lg font-mono text-sm relative">
+                    <div className="relative rounded-xl bg-gray-900 p-4 font-mono text-sm text-white">
                         <span className="absolute top-2 right-2 text-xs text-gray-500">CORRECT SOLUTION</span>
                         <pre>{forfeitData.solutionCode}</pre>
                     </div>
@@ -235,6 +369,41 @@ const ChallengeGenerator = ({ userPreference, userEmail, setUserXP }) => {
 
         </div>
       )}
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">✅ Correct! You solved it.</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              Time taken: <span className="font-mono">{formatTime(finalSolveTime)}</span>
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setShowShareModal(true);
+                }}
+                className="flex-1 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                Share with online user
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <PeerSessionHost
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        challenge={challenge}
+        solutionCode={submittedCode}
+      />
     </div>
   );
 };

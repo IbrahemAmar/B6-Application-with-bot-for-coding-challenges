@@ -1,6 +1,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const http = require('http');
+const { WebSocketServer, WebSocket } = require('ws');
 require('dotenv').config();
 const OpenAI = require("openai");
 
@@ -8,6 +10,14 @@ const User = require('./models/User');
 
 const app = express();
 const PORT = 5000;
+const server = http.createServer(app);
+
+const TOPIC_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
+const DEFAULT_LEVEL = 'Beginner';
+const PROMOTION_THRESHOLDS = {
+  Beginner: 100,
+  Intermediate: 200,
+};
 
 // --------------------
 // OPENAI CONFIGURATION
@@ -16,8 +26,131 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const createXPMap = () => {
+  const xp = new Map();
+  TOPIC_LEVELS.forEach(level => xp.set(level, 0));
+  return xp;
+};
+
+const normalizeXPMap = (xp) => {
+  const map = new Map();
+  TOPIC_LEVELS.forEach(level => {
+    const value = xp?.get ? xp.get(level) : xp?.[level];
+    map.set(level, Number.isFinite(value) ? value : 0);
+  });
+  return map;
+};
+
+const ensureTopicProgress = (user, topic) => {
+  if (!user.topicProgress) {
+    user.topicProgress = new Map();
+  }
+
+  const existing = user.topicProgress.get(topic);
+  if (existing) {
+    existing.level = TOPIC_LEVELS.includes(existing.level) ? existing.level : DEFAULT_LEVEL;
+    existing.xp = normalizeXPMap(existing.xp);
+    user.topicProgress.set(topic, existing);
+    return { entry: existing, updated: false };
+  }
+
+  const legacyLevel = user.topicLevels?.get?.(topic) || user.level || DEFAULT_LEVEL;
+  const entry = {
+    level: TOPIC_LEVELS.includes(legacyLevel) ? legacyLevel : DEFAULT_LEVEL,
+    xp: createXPMap(),
+  };
+  user.topicProgress.set(topic, entry);
+  return { entry, updated: true };
+};
+
+const serializeTopicProgress = (topicProgress) => {
+  if (!topicProgress) return {};
+  const entries = topicProgress instanceof Map ? topicProgress.entries() : Object.entries(topicProgress);
+  const result = {};
+
+  for (const [topicKey, progress] of entries) {
+    const level = TOPIC_LEVELS.includes(progress?.level) ? progress.level : DEFAULT_LEVEL;
+    const xpMap = normalizeXPMap(progress?.xp);
+    result[topicKey] = {
+      level,
+      xp: Object.fromEntries(xpMap),
+    };
+  }
+  return result;
+};
+
 app.use(cors());
 app.use(express.json());
+
+// --------------------
+// SIGNALING SERVER (WebRTC)
+// --------------------
+// IMPORTANT: This channel is for SDP/ICE signaling and room presence ONLY.
+// Do NOT send challenge content, solution code, or feedback here.
+const wss = new WebSocketServer({ server });
+const rooms = new Map();
+
+const broadcastToRoom = (roomId, data, sender) => {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  room.forEach(client => {
+    if (client !== sender && client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+};
+
+const removeFromRoom = (ws) => {
+  const roomId = ws.roomId;
+  if (!roomId) return;
+  const room = rooms.get(roomId);
+  if (!room) return;
+  room.delete(ws);
+  if (room.size === 0) {
+    rooms.delete(roomId);
+  } else {
+    broadcastToRoom(roomId, { type: 'peer-left' }, ws);
+  }
+};
+
+wss.on('connection', (ws) => {
+  ws.on('message', (raw) => {
+    let message;
+    try {
+      message = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+
+    const { type, roomId, payload } = message || {};
+    if (!type || !roomId) return;
+
+    if (type === 'join') {
+      const room = rooms.get(roomId) || new Set();
+      room.add(ws);
+      rooms.set(roomId, room);
+      ws.roomId = roomId;
+
+      if (room.size > 1) {
+        broadcastToRoom(roomId, { type: 'peer-joined' }, ws);
+      }
+      return;
+    }
+
+    if (type === 'leave') {
+      removeFromRoom(ws);
+      return;
+    }
+
+    if (type === 'offer' || type === 'answer' || type === 'candidate') {
+      broadcastToRoom(roomId, { type, payload }, ws);
+    }
+  });
+
+  ws.on('close', () => {
+    removeFromRoom(ws);
+  });
+});
 
 // --------------------
 // DATABASE CONNECTION
@@ -35,11 +168,19 @@ app.post('/api/register', async (req, res) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: "User already exists" });
 
+    const preferenceTopic = preference || 'Algorithms';
+    const topicProgress = new Map();
+    topicProgress.set(preferenceTopic, {
+      level: DEFAULT_LEVEL,
+      xp: createXPMap(),
+    });
+
     const newUser = new User({
       username, email, password,
-      level: level || 'Beginner',
-      preference: preference || 'Algorithms',
-      topicLevels: {}, 
+      level: level || DEFAULT_LEVEL,
+      preference: preferenceTopic,
+      topicLevels: {},
+      topicProgress,
       xp: 0, history: []
     });
 
@@ -56,6 +197,17 @@ app.post('/api/login', async (req, res) => {
     const user = await User.findOne({ email });
     if (!user || user.password !== password) return res.status(400).json({ message: "Invalid credentials" });
 
+    const preferenceTopic = user.preference || 'Algorithms';
+    const { updated } = ensureTopicProgress(user, preferenceTopic);
+    if (updated) {
+      await user.save();
+    }
+    const serializedProgress = serializeTopicProgress(user.topicProgress);
+    const currentEntry = serializedProgress[preferenceTopic] || {
+      level: DEFAULT_LEVEL,
+      xp: { Beginner: 0, Intermediate: 0, Advanced: 0 },
+    };
+
     res.json({
       message: "Login Successful",
       user: {
@@ -64,7 +216,10 @@ app.post('/api/login', async (req, res) => {
         level: user.level,
         xp: user.xp,
         preference: user.preference,
-        topicLevels: user.topicLevels 
+        topicLevels: user.topicLevels,
+        topicProgress: serializedProgress,
+        currentTopicLevel: currentEntry.level,
+        currentTopicXP: currentEntry.xp[currentEntry.level] || 0,
       }
     });
   } catch (error) {
@@ -78,9 +233,25 @@ app.put('/api/user/update', async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    user.preference = preference;
+    const preferenceTopic = preference || user.preference || 'Algorithms';
+    user.preference = preferenceTopic;
+
+    ensureTopicProgress(user, preferenceTopic);
     await user.save();
-    res.json({ message: "Preference updated!", preference });
+
+    const serializedProgress = serializeTopicProgress(user.topicProgress);
+    const currentEntry = serializedProgress[preferenceTopic] || {
+      level: DEFAULT_LEVEL,
+      xp: { Beginner: 0, Intermediate: 0, Advanced: 0 },
+    };
+
+    res.json({
+      message: "Preference updated!",
+      preference: preferenceTopic,
+      topicProgress: serializedProgress,
+      currentTopicLevel: currentEntry.level,
+      currentTopicXP: currentEntry.xp[currentEntry.level] || 0,
+    });
 
   } catch (error) {
     res.status(500).json({ message: "Error", error: error.message });
@@ -93,14 +264,19 @@ app.put('/api/user/update', async (req, res) => {
 
 // 1. GENERATE
 app.post('/api/generate-challenge', async (req, res) => {
-  const { topic, email } = req.body;
+  const { topic, email, language = 'JavaScript' } = req.body;
 
   try {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // Assessment Logic: If no history for this topic, start Intermediate
-    let levelToUse = user.topicLevels.get(topic) || 'Intermediate';
+    const { entry, updated } = ensureTopicProgress(user, topic);
+    if (updated) {
+      await user.save();
+    }
+
+    // Assessment Logic: Track level per topic
+    const levelToUse = entry.level || DEFAULT_LEVEL;
 
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo-1106",
@@ -115,7 +291,7 @@ app.post('/api/generate-challenge', async (req, res) => {
         },
         {
           role: "user",
-          content: `Generate a ${levelToUse} level coding challenge for ${topic} in JavaScript.`
+          content: `Generate a ${levelToUse} level coding challenge for ${topic} in ${language}.`
         }
       ]
     });
@@ -133,7 +309,7 @@ app.post('/api/generate-challenge', async (req, res) => {
 // 2. FORFEIT (Downgrade + Show Answer)
 // --------------------
 app.post('/api/forfeit', async (req, res) => {
-  const { email, topic, problemDescription } = req.body; // ✅ Added problemDescription
+  const { email, topic, problemDescription, language = 'JavaScript' } = req.body; // ✅ Added problemDescription
 
   try {
     const user = await User.findOne({ email });
@@ -152,7 +328,7 @@ app.post('/api/forfeit', async (req, res) => {
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: "You are a helpful coding tutor. Return JSON: { \"solutionCode\": \"string\", \"explanation\": \"string\" }" },
-          { role: "user", content: `Provide the correct JavaScript solution and a brief explanation for this problem: ${problemDescription}` }
+          { role: "user", content: `Provide the correct ${language} solution and a brief explanation for this problem: ${problemDescription}` }
         ]
     });
     
@@ -172,7 +348,7 @@ app.post('/api/forfeit', async (req, res) => {
 // 3. CHECK SOLUTION (+ Code Review)
 // --------------------
 app.post('/api/check-solution', async (req, res) => {
-  const { userCode, problemDescription, testCases } = req.body;
+  const { userCode, problemDescription, testCases, language = 'JavaScript' } = req.body;
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo-1106",
@@ -188,7 +364,7 @@ app.post('/api/check-solution', async (req, res) => {
               "improvementTips": "string (why the better solution is better, only if passed)" 
             }` 
         },
-        { role: "user", content: `Problem: ${problemDescription}\nTests: ${JSON.stringify(testCases)}\nCode: ${userCode}` }
+        { role: "user", content: `Language: ${language}\nProblem: ${problemDescription}\nTests: ${JSON.stringify(testCases)}\nCode: ${userCode}` }
       ]
     });
     
@@ -202,43 +378,61 @@ app.post('/api/check-solution', async (req, res) => {
 // 4. SOLVE & SAVE (Pass Assessment Logic)
 app.post('/api/solve', async (req, res) => {
   try {
-    const { email, title, difficulty, score, duration, topic } = req.body; // ✅ Added 'topic'
+    const { email, title, difficulty, score, duration, topic, challengeId, language } = req.body; // ✅ Added 'topic'
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const alreadySolved = user.history.some(h => h.title === title);
+    const { entry } = ensureTopicProgress(user, topic);
+
+    // Prefer a stable challengeId to avoid duplicate XP on repeated submits.
+    const alreadySolved = challengeId
+      ? user.history.some(h => h.challengeId === challengeId)
+      : user.history.some(h => h.title === title);
     let gainedXP = 0;
 
     if (!alreadySolved) {
-      
-      // 🧠 CHECK ASSESSMENT STATUS
-      const currentTopicLevel = user.topicLevels.get(topic);
+      gainedXP = score;
 
-      if (!currentTopicLevel) {
-          // ✅ CASE 1: First time ever for this topic (Assessment Passed!)
-          gainedXP = 100; // PLACEMENT BONUS
-          user.topicLevels.set(topic, 'Intermediate'); // Lock in Intermediate
-      } else {
-          // ✅ CASE 2: Regular Solve
-          gainedXP = score; 
+      const currentLevel = entry.level || DEFAULT_LEVEL;
+      const currentXP = entry.xp.get(currentLevel) || 0;
+      const updatedXP = currentXP + gainedXP;
+      entry.xp.set(currentLevel, updatedXP);
+
+      if (currentLevel === 'Beginner' && updatedXP >= PROMOTION_THRESHOLDS.Beginner) {
+        entry.level = 'Intermediate';
+      } else if (currentLevel === 'Intermediate' && updatedXP >= PROMOTION_THRESHOLDS.Intermediate) {
+        entry.level = 'Advanced';
       }
 
-      user.xp += gainedXP;
+      user.topicProgress.set(topic, entry);
+
+      user.history.push({
+        title,
+        difficulty,
+        score: gainedXP,
+        duration,
+        language,
+        challengeId,
+        date: new Date(),
+      });
     }
 
-    // Level Up Check
-    if (user.xp >= 200) user.level = 'Advanced';
-    else if (user.xp >= 100) user.level = 'Intermediate';
-    else user.level = 'Beginner';
-
-    user.history.push({ title, difficulty, score: gainedXP, duration, date: new Date() });
-    
     await user.save();
+
+    const serializedProgress = serializeTopicProgress(user.topicProgress);
+    const currentEntry = serializedProgress[topic] || {
+      level: DEFAULT_LEVEL,
+      xp: { Beginner: 0, Intermediate: 0, Advanced: 0 },
+    };
 
     res.json({ 
         message: "Solved!", 
         gainedXP, 
-        updatedUser: { xp: user.xp, level: user.level } 
+        updatedUser: {
+          topicProgress: serializedProgress,
+          currentTopicLevel: currentEntry.level,
+          currentTopicXP: currentEntry.xp[currentEntry.level] || 0,
+        } 
     });
 
   } catch (error) {
@@ -258,4 +452,4 @@ app.get('/api/history/:email', async (req, res) => {
 // --------------------
 // START SERVER
 // --------------------
-app.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 Server running on ${PORT}`));

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const SettingsPage = ({ userEmail, userPreference, setUserPreference }) => {
+const SettingsPage = ({ userEmail, userPreference, setUserPreference, setTopicProgress }) => {
   // Local state for the dropdown
   const [selectedPref, setSelectedPref] = useState(userPreference || 'Algorithms');
   const [message, setMessage] = useState('');
@@ -26,6 +26,9 @@ const SettingsPage = ({ userEmail, userPreference, setUserPreference }) => {
         setMessage('✅ Settings Saved Successfully!');
         // Update the global app state so the AI Generator knows immediately
         setUserPreference(selectedPref);
+        if (data.topicProgress) {
+          setTopicProgress?.(data.topicProgress);
+        }
       } else {
         setMessage(`❌ Error: ${data.message}`);
       }
@@ -38,31 +41,31 @@ const SettingsPage = ({ userEmail, userPreference, setUserPreference }) => {
   };
 
   return (
-    <div className="max-w-xl mx-auto mt-10 p-6 bg-white shadow-lg rounded-xl">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">
+    <div className="mx-auto max-w-2xl rounded-3xl border border-gray-200 bg-white/90 p-8 shadow-xl dark:border-gray-800 dark:bg-gray-900/80">
+      <h2 className="mb-6 border-b border-gray-100 pb-3 text-2xl font-bold text-gray-900 dark:border-gray-800 dark:text-gray-100">
         User Settings
       </h2>
 
       <div className="mb-6">
-        <label className="block text-gray-700 font-bold mb-2">Email Address</label>
+        <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-200">Email Address</label>
         <input 
           type="text" 
           value={userEmail} 
           disabled 
-          className="w-full p-3 bg-gray-100 border rounded text-gray-500 cursor-not-allowed"
+          className="w-full rounded-lg border border-gray-200 bg-gray-100 p-3 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
         />
         <p className="text-xs text-gray-400 mt-1">Email cannot be changed.</p>
       </div>
 
       <div className="mb-8">
-        <label className="block text-gray-700 font-bold mb-2">Preferred Topic</label>
-        <p className="text-sm text-gray-500 mb-2">
+        <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-200">Preferred Topic</label>
+        <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
           This controls what kind of questions the AI generates for you.
         </p>
         <select 
           value={selectedPref} 
           onChange={(e) => setSelectedPref(e.target.value)}
-          className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none transition"
+          className="w-full rounded-lg border border-gray-300 p-3 text-sm text-gray-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
         >
           <option value="Algorithms">Algorithms</option>
           <option value="Frontend">Frontend (React, CSS, DOM)</option>
@@ -73,8 +76,8 @@ const SettingsPage = ({ userEmail, userPreference, setUserPreference }) => {
       <button 
         onClick={handleSave}
         disabled={loading}
-        className={`w-full py-3 font-bold text-white rounded-lg transition-all ${
-          loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg'
+        className={`w-full rounded-full py-3 text-sm font-semibold text-white transition-all ${
+          loading ? 'cursor-not-allowed bg-gray-400' : 'bg-blue-600 shadow-md hover:bg-blue-700'
         }`}
       >
         {loading ? 'Saving...' : 'Save Changes'}
@@ -83,7 +86,9 @@ const SettingsPage = ({ userEmail, userPreference, setUserPreference }) => {
       {/* Success/Error Message */}
       {message && (
         <div className={`mt-4 p-3 rounded text-center font-medium ${
-          message.includes('✅') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+          message.includes('✅')
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-200'
+            : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-200'
         }`}>
           {message}
         </div>
