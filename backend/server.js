@@ -303,18 +303,36 @@ app.post('/api/generate-challenge', async (req, res) => {
       model: "gpt-3.5-turbo-1106",
       response_format: { type: "json_object" },
       messages: [
-        {
-          role: "system",
-          content: `You are a coding interview generator. Return JSON object with: 
-            title, description, starterCode, 
-            testCases (array of 3 objects with 'input' and 'expectedOutput'), 
-            and hints (array of 3 strings).`
-        },
-        {
-          role: "user",
-          content: `Generate a ${levelToUse} level coding challenge for ${topic} in ${language}.`
-        }
+      {
+        role: "system",
+        content: `You are a coding interview generator. Return a JSON object with these exact fields:
+        - title
+        - description
+        - solutionCode (The fully working, correct solution implementation)
+        - starterCode (ONLY the function signature and a 'pass' statement. MUST NOT contain the answer.)
+        - testCases (array of 3 objects with 'input' and 'expectedOutput')
+        - hints (array of 3 strings)`
+      },
+      {
+        role: "user",
+        content: `Generate a ${levelToUse} level coding challenge for ${topic} in ${language}.`
+      }
       ]
+      // messages: [
+      //   {
+      //     role: "system",
+      //     content: `You are a coding interview generator. Return JSON object with: 
+      //     title, 
+      //     description, 
+      //     starterCode (This must contain ONLY the function signature and a 'pass' or return statement. DO NOT implement the solution logic here.), 
+      //     testCases (array of 3 objects with 'input' and 'expectedOutput'), 
+      //     and hints (array of 3 strings).`
+      //   },
+      //   {
+      //     role: "user",
+      //     content: `Generate a ${levelToUse} level coding challenge for ${topic} in ${language}.`
+      //   }
+      // ]
     });
 
     const challenge = JSON.parse(response.choices[0].message.content);

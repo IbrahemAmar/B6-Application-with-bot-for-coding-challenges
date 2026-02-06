@@ -120,10 +120,13 @@ const ChallengeGenerator = ({
 
   // --- 2. REVEAL HINT ---
   const handleRevealHint = () => {
-    if (hintsRevealed < challenge.hints.length) {
-        if(window.confirm("Revealing a hint costs 5 XP. Continue?")) {
-            setHintsRevealed(prev => prev + 1);
-        }
+    // Safety check
+    if (!challenge || hintsRevealed >= challenge.hints.length) return;
+
+    // LOGIC: If we have already revealed a hint (hintsRevealed > 0), 
+    // skip the confirm. Otherwise (if it's 0), show the confirm.
+    if (hintsRevealed > 0 || window.confirm("Revealing a hint costs 5 XP of the XP's for solving this question. Continue?")) {
+        setHintsRevealed(prev => prev + 1);
     }
   };
 
