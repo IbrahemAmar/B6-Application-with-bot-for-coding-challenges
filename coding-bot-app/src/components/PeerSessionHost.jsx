@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import DiscussionModal from './DiscussionModal';
 
-const SIGNALING_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:5000`;
+const SIGNALING_URL = 'wss://b6-application-with-bot-for-coding.onrender.com';
 const MESSAGE_TYPES = {
   ACCEPT: 'ACCEPT',
   DECLINE: 'DECLINE',

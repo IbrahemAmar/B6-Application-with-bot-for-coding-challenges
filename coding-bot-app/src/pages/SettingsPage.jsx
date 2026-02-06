@@ -11,7 +11,7 @@ const SettingsPage = ({ userEmail, userPreference, setUserPreference, setTopicPr
     setMessage('');
 
     try {
-      const res = await fetch('http://localhost:5000/api/user/update', {
+      const res = await fetch('https://b6-application-with-bot-for-coding.onrender.com/api/user/update', {
         method: 'PUT', // ✅ Method must be PUT
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

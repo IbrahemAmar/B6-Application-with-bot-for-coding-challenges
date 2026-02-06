@@ -18,7 +18,7 @@ const AuthPage = ({ mode = 'signin', onLogin, theme, onToggleTheme }) => {
   // --- LOGIN LOGIC ---
   const handleLoginSubmit = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch('https://b6-application-with-bot-for-coding.onrender.com/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -44,7 +44,7 @@ const AuthPage = ({ mode = 'signin', onLogin, theme, onToggleTheme }) => {
   const handleRegister = async () => {
     try {
       // ✅ FIX 1: removed 'level' from body. The backend now defaults to 'Initial' automatically.
-      const response = await fetch('http://localhost:5000/api/register', {
+      const response = await fetch('https://b6-application-with-bot-for-coding.onrender.com/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

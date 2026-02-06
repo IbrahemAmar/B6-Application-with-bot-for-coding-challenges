@@ -12,7 +12,7 @@ const HistoryPage = ({ userEmail }) => {
     setLoading(true);
     setError('');
 
-    fetch(`http://localhost:5000/api/history/${userEmail}`)
+    fetch(`https://b6-application-with-bot-for-coding.onrender.com/api/history/${userEmail}`)
       .then(res => {
         if (!res.ok) {
           throw new Error('Failed to fetch history');

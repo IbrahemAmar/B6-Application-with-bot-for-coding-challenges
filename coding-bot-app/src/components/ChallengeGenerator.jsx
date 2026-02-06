@@ -94,7 +94,7 @@ const ChallengeGenerator = ({
     setHintsRevealed(0); 
     
     try {
-      const res = await fetch('http://localhost:5000/api/generate-challenge', {
+      const res = await fetch('https://b6-application-with-bot-for-coding.onrender.com/api/generate-challenge' , {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -134,7 +134,7 @@ const ChallengeGenerator = ({
   const handleForfeit = async () => {
     if (!window.confirm("Are you sure? Failing the assessment starts you at 0 Bonus XP.")) return;
     try {
-        const res = await fetch('http://localhost:5000/api/forfeit', {
+        const res = await fetch('https://b6-application-with-bot-for-coding.onrender.com/api/forfeit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -174,7 +174,7 @@ const ChallengeGenerator = ({
     setSuccessData(null);
 
     try {
-      const res = await fetch('http://localhost:5000/api/check-solution', {
+      const res = await fetch('https://b6-application-with-bot-for-coding.onrender.com/api/check-solution', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -203,7 +203,7 @@ const ChallengeGenerator = ({
         const penalty = hintsRevealed * 5;
         points = Math.max(0, points - penalty); 
 
-        const solveRes = await fetch('http://localhost:5000/api/solve', {
+        const solveRes = await fetch('https://b6-application-with-bot-for-coding.onrender.com/api/solve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
