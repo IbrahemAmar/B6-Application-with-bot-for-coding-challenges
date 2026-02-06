@@ -9,7 +9,7 @@ const OpenAI = require("openai");
 const User = require('./models/User');
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;;
 const server = http.createServer(app);
 
 // ✅ LEVELS CONFIG
