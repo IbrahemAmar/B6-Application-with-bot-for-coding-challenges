@@ -1,5 +1,6 @@
 # CodeBot Arena
 A full-stack coding challenges platform with topic-based progression and peer discussion.
+
 Live: https://b6-application-with-bot-for-coding.vercel.app/
 
 ## Project Overview
