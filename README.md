@@ -1,5 +1,6 @@
 # CodeBot Arena
 A full-stack coding challenges platform with topic-based progression and peer discussion.
+Live: https://b6-application-with-bot-for-coding.vercel.app/
 
 ## Project Overview
 CodeBot Arena is a coding practice platform where users solve AI-generated challenges, track progress, and improve over time. Challenges are organized by topic, and difficulty levels are tracked per topic. Users gain XP per topic and difficulty level, and can optionally start peer-to-peer discussion sessions for feedback and collaboration.
